@@ -94,24 +94,32 @@ html, body {
 
 /* ---- Main layout ---- */
 #main {
-  display: flex;
+  position: relative;
   height: calc(100% - 36px);
 }
 
 /* ---- Sidebar ---- */
 #sidebar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
   width: 0;
   overflow: hidden;
   background: #2a2d30;
   border-right: 1px solid #1a1d20;
   transition: width 0.2s ease;
-  flex-shrink: 0;
+  z-index: 5;
   display: flex;
   flex-direction: column;
 }
 
 #sidebar.sidebar-open {
   width: 240px;
+}
+
+#sidebar.sidebar-open ~ #viewer-container {
+  left: 240px;
 }
 
 #sidebar-tabs {
@@ -171,9 +179,12 @@ html, body {
 
 /* ---- Viewer container ---- */
 #viewer-container {
-  flex: 1;
   overflow: auto;
-  position: relative;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
 }
 
 /* Override pdf.js viewer styles */
