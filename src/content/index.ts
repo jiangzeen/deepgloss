@@ -1,7 +1,6 @@
 import { SelectionDetector, type SelectionInfo } from './selection-detector';
 import { TriggerIcon } from './trigger-icon';
 import { CardHost } from './card/card-host';
-import { PdfBanner } from './pdf-banner';
 import { sendMessage, openStreamPort } from '@/messaging/sender';
 import type { DeepGlossSettings } from '@/storage/settings';
 import type {
@@ -173,14 +172,4 @@ class DeepGlossContentScript {
 
 // Bootstrap
 const deepgloss = new DeepGlossContentScript();
-deepgloss.init().then(() => {
-  // PDF detection: show banner if on a PDF page and feature is enabled
-  if (PdfBanner.isPdfPage()) {
-    chrome.storage.sync.get({ pdfViewerEnabled: true }, (result) => {
-      if (result.pdfViewerEnabled) {
-        const banner = new PdfBanner();
-        banner.show();
-      }
-    });
-  }
-});
+deepgloss.init();

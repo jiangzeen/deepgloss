@@ -154,4 +154,51 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
+// ---- PDF interception ----
+// Redirect PDF navigations to our bridge page (which loads sandboxed PDF.js viewer)
+async function isPdfInterceptionEnabled(): Promise<boolean> {
+  const result = await chrome.storage.sync.get({ pdfViewerEnabled: true });
+  return result.pdfViewerEnabled;
+}
+
+chrome.webRequest.onHeadersReceived.addListener(
+  (details) => {
+    // Only handle main frame navigations
+    if (details.type !== 'main_frame') return;
+
+    // Check Content-Type header for PDF
+    const contentType = details.responseHeaders?.find(
+      (h) => h.name.toLowerCase() === 'content-type',
+    );
+    const isPdf =
+      contentType?.value?.toLowerCase().includes('application/pdf') ||
+      details.url.match(/\.pdf(\?|#|$)/i);
+
+    if (!isPdf) return;
+
+    // Check if feature is enabled (async, but we need to redirect synchronously)
+    // Use a cached flag that's updated on storage change
+    if (!pdfInterceptionEnabled) return;
+
+    const bridgeUrl = chrome.runtime.getURL(
+      `src/pdfviewer/bridge.html?url=${encodeURIComponent(details.url)}`,
+    );
+
+    return { redirectUrl: bridgeUrl };
+  },
+  { urls: ['<all_urls>'] },
+  ['responseHeaders'],
+);
+
+// Cache the pdfViewerEnabled flag for synchronous access
+let pdfInterceptionEnabled = true;
+chrome.storage.sync.get({ pdfViewerEnabled: true }, (result) => {
+  pdfInterceptionEnabled = result.pdfViewerEnabled;
+});
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync' && changes.pdfViewerEnabled !== undefined) {
+    pdfInterceptionEnabled = changes.pdfViewerEnabled.newValue;
+  }
+});
+
 console.log('[DeepGloss] Service worker loaded');

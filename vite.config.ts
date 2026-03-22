@@ -14,6 +14,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         pdfviewer: 'src/pdfviewer/index.html',
+        pdfbridge: 'src/pdfviewer/bridge.html',
       },
     },
   },

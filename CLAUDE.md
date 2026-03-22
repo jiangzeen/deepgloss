@@ -38,7 +38,6 @@ src/
 │   ├── index.ts             # Entry: wires selection → trigger → card → translation
 │   ├── selection-detector.ts
 │   ├── trigger-icon.ts
-│   ├── pdf-banner.ts        # PDF page detection + banner prompt
 │   └── card/                # Translation card (Shadow DOM)
 ├── popup/                   # Browser action popup (Preact)
 ├── options/                 # Extension settings page (Preact)
@@ -47,7 +46,7 @@ src/
 │   ├── google-translate.ts  # Free Google Translate
 │   ├── openai-compatible.ts # OpenAI-compatible API (streaming)
 │   └── provider-registry.ts
-├── pdfviewer/               # PDF.js viewer page (non-auto, user-triggered)
+├── pdfviewer/               # Sandbox PDF.js viewer + bridge page
 ├── storage/                 # chrome.storage (settings) + IndexedDB (cache/history)
 ├── messaging/               # Type-safe message passing (content ↔ background)
 └── shared/                  # Constants, language list, utilities
@@ -77,13 +76,20 @@ src/
 
 ## PDF translation support
 
-Chrome's built-in PDF viewer renders content inside an `<embed>` plugin element that content scripts cannot access. DeepGloss uses a non-invasive approach:
+Chrome's built-in PDF viewer renders content inside an `<embed>` plugin element that content scripts cannot access. DeepGloss uses a sandbox + PDF.js approach (similar to Google Scholar PDF Reader):
 
-- When a PDF page is detected, a top banner prompts the user to open it in DeepGloss's built-in PDF.js viewer
-- The PDF.js viewer (`src/pdfviewer/`) renders PDF as standard HTML DOM with a text layer, enabling normal text selection and translation
-- This does NOT auto-replace Chrome's PDF viewer — the user explicitly chooses per file
-- The feature can be toggled off in Settings (`pdfViewerEnabled`)
-- PDF.js viewer is registered as `web_accessible_resources` and as an additional Vite entry in `vite.config.ts`
+**Architecture:**
+- `chrome.webRequest.onHeadersReceived` intercepts PDF navigations and redirects to the bridge page
+- **Bridge page** (`src/pdfviewer/bridge.html`): runs in extension context, has `chrome.*` API access. Embeds the sandbox viewer in an iframe and bridges translation via `postMessage`
+- **Sandbox viewer** (`src/pdfviewer/index.html`): runs in isolated origin with relaxed CSP. Uses official pdf.js components (`PDFViewer`, `PDFLinkService`, `EventBus`) for rendering with full features (outline/TOC, zoom, text layer, search)
+- Translation flow: sandbox detects selection → `postMessage` to bridge → bridge uses `chrome.runtime.connect` to stream translation from service worker → `postMessage` result back to sandbox
+- The replacement is seamless — user sees PDF rendered with full translation support without extra clicks
+- Can be toggled off in Settings (`pdfViewerEnabled`) to restore Chrome's default PDF viewer
+
+**Why sandbox:**
+1. Relaxed CSP — PDF.js font rendering needs features blocked by extension CSP
+2. Security isolation — untrusted PDF content can't access `chrome.*` APIs
+3. Seamless UX — URL interception at the browser level, no manual redirection needed
 
 ## Message passing
 
