@@ -1,0 +1,35 @@
+.dg-trigger {
+  position: fixed;
+  z-index: 2147483646;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #4285f4;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  opacity: 0;
+  transform: scale(0.6);
+  pointer-events: none;
+}
+
+.dg-trigger.visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.dg-trigger:hover {
+  transform: scale(1.1);
+  background: #3367d6;
+}
+
+.dg-trigger svg {
+  width: 16px;
+  height: 16px;
+  fill: #fff;
+}
