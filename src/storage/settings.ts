@@ -13,6 +13,7 @@ export interface DeepGlossSettings {
   cacheEnabled: boolean;
   cacheMaxSize: number;
   historyEnabled: boolean;
+  pdfViewerEnabled: boolean;
 }
 
 const DEFAULTS: DeepGlossSettings = {
@@ -28,6 +29,7 @@ const DEFAULTS: DeepGlossSettings = {
   cacheEnabled: true,
   cacheMaxSize: 1000,
   historyEnabled: true,
+  pdfViewerEnabled: true,
 };
 
 export async function loadSettings(): Promise<DeepGlossSettings> {

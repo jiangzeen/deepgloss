@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeepGloss PDF Viewer</title>
+  <link rel="stylesheet" href="./viewer.css" />
+</head>
+<body>
+  <div id="toolbar">
+    <div class="toolbar-left">
+      <button id="prev-btn" title="Previous Page">&#9664;</button>
+      <span id="page-info">
+        <input id="page-input" type="number" min="1" value="1" />
+        / <span id="page-count">-</span>
+      </span>
+      <button id="next-btn" title="Next Page">&#9654;</button>
+    </div>
+    <div class="toolbar-center">
+      <button id="zoom-out" title="Zoom Out">&#8722;</button>
+      <span id="zoom-level">100%</span>
+      <button id="zoom-in" title="Zoom In">&#43;</button>
+      <button id="zoom-fit" title="Fit Width">Fit</button>
+    </div>
+    <div class="toolbar-right">
+      <span class="toolbar-hint">Powered by DeepGloss — select text to translate</span>
+    </div>
+  </div>
+  <div id="viewer-container">
+    <div id="viewer"></div>
+  </div>
+  <script type="module" src="./viewer.ts"></script>
+</body>
+</html>

@@ -38,6 +38,7 @@ src/
 │   ├── index.ts             # Entry: wires selection → trigger → card → translation
 │   ├── selection-detector.ts
 │   ├── trigger-icon.ts
+│   ├── pdf-banner.ts        # PDF page detection + banner prompt
 │   └── card/                # Translation card (Shadow DOM)
 ├── popup/                   # Browser action popup (Preact)
 ├── options/                 # Extension settings page (Preact)
@@ -46,6 +47,7 @@ src/
 │   ├── google-translate.ts  # Free Google Translate
 │   ├── openai-compatible.ts # OpenAI-compatible API (streaming)
 │   └── provider-registry.ts
+├── pdfviewer/               # PDF.js viewer page (non-auto, user-triggered)
 ├── storage/                 # chrome.storage (settings) + IndexedDB (cache/history)
 ├── messaging/               # Type-safe message passing (content ↔ background)
 └── shared/                  # Constants, language list, utilities
@@ -72,6 +74,16 @@ src/
 - **Cache**: IndexedDB `cache` store — LRU eviction, keyed by text+lang+provider hash
 - **History**: IndexedDB `history` store — auto-increment, indexed by `createdAt`
 - Both IndexedDB stores share a single `deepgloss` database (schema in `src/storage/idb-schema.ts`)
+
+## PDF translation support
+
+Chrome's built-in PDF viewer renders content inside an `<embed>` plugin element that content scripts cannot access. DeepGloss uses a non-invasive approach:
+
+- When a PDF page is detected, a top banner prompts the user to open it in DeepGloss's built-in PDF.js viewer
+- The PDF.js viewer (`src/pdfviewer/`) renders PDF as standard HTML DOM with a text layer, enabling normal text selection and translation
+- This does NOT auto-replace Chrome's PDF viewer — the user explicitly chooses per file
+- The feature can be toggled off in Settings (`pdfViewerEnabled`)
+- PDF.js viewer is registered as `web_accessible_resources` and as an additional Vite entry in `vite.config.ts`
 
 ## Message passing
 

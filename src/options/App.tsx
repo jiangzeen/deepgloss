@@ -17,6 +17,7 @@ const DEFAULTS: DeepGlossSettings = {
   cacheEnabled: true,
   cacheMaxSize: 1000,
   historyEnabled: true,
+  pdfViewerEnabled: true,
 };
 
 export function App() {
@@ -58,6 +59,20 @@ export function App() {
 
       <Section title="Translation Card">
         <CardConfig settings={settings} onUpdate={updateSetting} />
+      </Section>
+
+      <Section title="PDF Translation">
+        <ToggleRow
+          label="Enable PDF translation support"
+          checked={settings.pdfViewerEnabled}
+          onChange={(v) => updateSetting('pdfViewerEnabled', v)}
+        />
+        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 0', lineHeight: 1.5 }}>
+          When enabled, opening a PDF file in the browser will show a top bar prompt. Click "Open in Translation Viewer" to open the PDF in DeepGloss's built-in viewer, where you can select text and translate it — just like on a regular webpage. This does not change the Chrome default PDF viewer; you can choose to use it on a per-file basis.
+        </p>
+        <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 0', lineHeight: 1.5 }}>
+          开启后，在浏览器中打开 PDF 文件时会在页面顶部显示提示条。点击「在翻译查看器中打开」即可在 DeepGloss 内置阅读器中打开该 PDF，像普通网页一样选中文字进行划词翻译。此功能不会替换 Chrome 默认的 PDF 查看器，您可以逐个文件选择是否使用。
+        </p>
       </Section>
 
       <Section title="Cache & History">

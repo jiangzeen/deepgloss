@@ -1,0 +1,150 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: #525659;
+}
+
+/* Toolbar */
+#toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 12px;
+  background: #323639;
+  color: #d1d1d1;
+  font-size: 13px;
+  user-select: none;
+  position: relative;
+  z-index: 10;
+}
+
+.toolbar-left, .toolbar-center, .toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar-hint {
+  font-size: 12px;
+  color: #888;
+}
+
+#toolbar button {
+  background: #4a4d50;
+  border: none;
+  color: #d1d1d1;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#toolbar button:hover {
+  background: #5a5d60;
+}
+
+#toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+#zoom-fit {
+  width: auto;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+#page-input {
+  width: 40px;
+  text-align: center;
+  background: #4a4d50;
+  border: none;
+  color: #d1d1d1;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 13px;
+}
+
+#page-input:focus {
+  outline: 1px solid #6a9edc;
+}
+
+#zoom-level {
+  min-width: 40px;
+  text-align: center;
+  font-size: 12px;
+}
+
+/* Viewer container */
+#viewer-container {
+  height: calc(100% - 40px);
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+}
+
+#viewer {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Individual page */
+.pdf-page {
+  position: relative;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.pdf-page canvas {
+  display: block;
+}
+
+/* Text layer — overlaid on canvas for selection */
+.text-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  opacity: 0.25;
+  line-height: 1;
+}
+
+.text-layer > span {
+  position: absolute;
+  white-space: pre;
+  color: transparent;
+  pointer-events: all;
+}
+
+.text-layer ::selection {
+  background: #4285f4;
+  color: transparent;
+}
+
+/* Loading indicator */
+.page-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 600px;
+  min-width: 400px;
+  color: #888;
+  font-size: 14px;
+}
