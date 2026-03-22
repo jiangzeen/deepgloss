@@ -42,12 +42,28 @@ const pdfViewer = new PDFViewer({
 
 linkService.setViewer(pdfViewer);
 
-// ---- Get PDF URL ----
-function getPdfUrl(): string | null {
-  const params = new URLSearchParams(window.location.search);
-  const url = params.get('url');
-  return url ? decodeURIComponent(url) : null;
-}
+// ---- PDF data received from bridge via postMessage ----
+let pdfDataResolve: ((data: ArrayBuffer) => void) | null = null;
+let pdfDataReject: ((err: Error) => void) | null = null;
+const pdfDataPromise = new Promise<ArrayBuffer>((resolve, reject) => {
+  pdfDataResolve = resolve;
+  pdfDataReject = reject;
+});
+
+window.addEventListener('message', (evt) => {
+  const { type } = evt.data || {};
+
+  if (type === 'DEEPGLOSS_PDF_DATA') {
+    pdfDataResolve?.(evt.data.payload as ArrayBuffer);
+  } else if (type === 'DEEPGLOSS_PDF_INFO') {
+    const { fileName } = evt.data.payload;
+    document.title = `${fileName} - DeepGloss`;
+  } else if (type === 'DEEPGLOSS_PDF_ERROR') {
+    pdfDataReject?.(new Error(evt.data.payload.message));
+  } else if (type === 'DEEPGLOSS_TRANSLATE_RESULT') {
+    handleTranslationResponse(evt.data.payload);
+  }
+});
 
 // ---- Outline / TOC ----
 async function renderOutline(doc: PDFDocumentProxy): Promise<void> {
@@ -341,12 +357,7 @@ function handleTranslationResponse(data: { chunk?: string; done?: boolean; error
   }
 }
 
-// Listen for translation results from parent
-window.addEventListener('message', (evt) => {
-  if (evt.data?.type === 'DEEPGLOSS_TRANSLATE_RESULT') {
-    handleTranslationResponse(evt.data.payload);
-  }
-});
+// Translation results are handled in the unified message listener above
 
 function escapeHtml(text: string): string {
   const div = document.createElement('div');
@@ -356,19 +367,15 @@ function escapeHtml(text: string): string {
 
 // ---- Init ----
 async function init(): Promise<void> {
-  const url = getPdfUrl();
-  if (!url) {
-    loadingText.textContent = 'No PDF URL provided.';
-    return;
-  }
-
-  const fileName = decodeURIComponent(url.split('/').pop()?.split('?')[0] || 'PDF');
-  document.title = `${fileName} - DeepGloss`;
-
   try {
+    loadingText.textContent = 'Waiting for PDF data...';
+
+    // Wait for PDF ArrayBuffer from bridge (extension context fetches to bypass CORS)
+    const arrayBuffer = await pdfDataPromise;
+
     loadingText.textContent = 'Loading PDF...';
     const loadingTask = pdfjsLib.getDocument({
-      url,
+      data: arrayBuffer,
       cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4/cmaps/',
       cMapPacked: true,
     });

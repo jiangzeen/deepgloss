@@ -1,9 +1,11 @@
 /**
  * Bridge script: runs in the extension context (non-sandboxed).
- * Listens for postMessage from the sandboxed PDF viewer iframe/page
- * and forwards translation requests to the service worker.
  *
- * This page wraps the sandboxed viewer in an iframe.
+ * Responsibilities:
+ * 1. Fetch PDF data (extension context has host permissions, bypassing CORS)
+ * 2. Send PDF data to sandboxed viewer via postMessage (ArrayBuffer transfer)
+ * 3. Forward translation requests from sandbox to service worker
+ * 4. Forward translation results back to sandbox
  */
 
 import { STREAM_PORT_NAME } from '@/shared/constants';
@@ -11,9 +13,9 @@ import { STREAM_PORT_NAME } from '@/shared/constants';
 const params = new URLSearchParams(window.location.search);
 const pdfUrl = params.get('url') || '';
 
-// Create iframe pointing to sandboxed viewer
+// Create iframe pointing to sandboxed viewer (without PDF url — we'll send data directly)
 const iframe = document.createElement('iframe');
-iframe.src = chrome.runtime.getURL(`src/pdfviewer/index.html?url=${encodeURIComponent(pdfUrl)}`);
+iframe.src = chrome.runtime.getURL('src/pdfviewer/index.html');
 iframe.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:none;';
 document.body.style.margin = '0';
 document.body.style.overflow = 'hidden';
@@ -23,12 +25,44 @@ document.body.appendChild(iframe);
 const fileName = decodeURIComponent(pdfUrl.split('/').pop()?.split('?')[0] || 'PDF');
 document.title = `${fileName} - DeepGloss`;
 
-// Listen for translation requests from sandbox
+// Once iframe is ready, fetch PDF and send data
+iframe.addEventListener('load', async () => {
+  // Tell sandbox the original URL (for display in toolbar)
+  iframe.contentWindow?.postMessage({
+    type: 'DEEPGLOSS_PDF_INFO',
+    payload: { url: pdfUrl, fileName },
+  }, '*');
+
+  try {
+    // Fetch PDF in extension context (has host permissions, no CORS issue)
+    const resp = await fetch(pdfUrl);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+
+    const arrayBuffer = await resp.arrayBuffer();
+
+    // Transfer ArrayBuffer to sandbox (zero-copy via transferable)
+    iframe.contentWindow?.postMessage({
+      type: 'DEEPGLOSS_PDF_DATA',
+      payload: arrayBuffer,
+    }, '*', [arrayBuffer]);
+  } catch (err) {
+    iframe.contentWindow?.postMessage({
+      type: 'DEEPGLOSS_PDF_ERROR',
+      payload: { message: (err as Error).message },
+    }, '*');
+  }
+});
+
+// Listen for messages from sandbox
 window.addEventListener('message', async (evt) => {
-  if (evt.data?.type !== 'DEEPGLOSS_TRANSLATE') return;
+  const { type } = evt.data || {};
 
-  const { text } = evt.data.payload;
+  if (type === 'DEEPGLOSS_TRANSLATE') {
+    handleTranslateRequest(evt.data.payload.text);
+  }
+});
 
+async function handleTranslateRequest(text: string): Promise<void> {
   // Load settings
   const settings = await chrome.storage.sync.get({
     activeProvider: 'google',
@@ -77,9 +111,7 @@ window.addEventListener('message', async (evt) => {
         type: 'DEEPGLOSS_TRANSLATE_RESULT',
         payload: { chunk: msg.payload.chunk, done: msg.payload.done },
       }, '*');
-      if (msg.payload.done) {
-        port.disconnect();
-      }
+      if (msg.payload.done) port.disconnect();
     } else if (msg.type === 'TRANSLATE_ERROR') {
       iframe.contentWindow?.postMessage({
         type: 'DEEPGLOSS_TRANSLATE_RESULT',
@@ -88,4 +120,4 @@ window.addEventListener('message', async (evt) => {
       port.disconnect();
     }
   });
-});
+}
