@@ -19,7 +19,7 @@ export class OpenAICompatibleProvider implements TranslationProvider {
     requiresApiKey: true,
   };
 
-  private apiKey = "sk-5b4a5ae3643647bfb0a903a50519c5ba";
+  private apiKey = "";
   private endpoint = "https://api.deepseek.com";
   private model = "deepseek-chat";
 
@@ -50,18 +50,21 @@ export class OpenAICompatibleProvider implements TranslationProvider {
   ): Promise<{ valid: boolean; error?: string }> {
     if (!config.apiKey) return { valid: false, error: "API key is required" };
     try {
-      const resp = await fetch(this.getCompletionsUrl(config.endpoint as string), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${config.apiKey}`,
+      const resp = await fetch(
+        this.getCompletionsUrl(config.endpoint as string),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${config.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: config.model || this.model,
+            messages: [{ role: "user", content: "Hi" }],
+            max_tokens: 1,
+          }),
         },
-        body: JSON.stringify({
-          model: config.model || this.model,
-          messages: [{ role: "user", content: "Hi" }],
-          max_tokens: 1,
-        }),
-      });
+      );
       return resp.ok
         ? { valid: true }
         : { valid: false, error: `API returned ${resp.status}` };
