@@ -11,6 +11,12 @@ export default defineConfig({
   build: {
     target: 'esnext',
     minify: 'esbuild',
+    rollupOptions: {
+      input: {
+        pdfviewer: 'src/pdfviewer/index.html',
+        pdfbridge: 'src/pdfviewer/bridge.html',
+      },
+    },
   },
   resolve: {
     alias: {

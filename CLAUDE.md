@@ -46,6 +46,7 @@ src/
 │   ├── google-translate.ts  # Free Google Translate
 │   ├── openai-compatible.ts # OpenAI-compatible API (streaming)
 │   └── provider-registry.ts
+├── pdfviewer/               # Sandbox PDF.js viewer + bridge page
 ├── storage/                 # chrome.storage (settings) + IndexedDB (cache/history)
 ├── messaging/               # Type-safe message passing (content ↔ background)
 └── shared/                  # Constants, language list, utilities
@@ -72,6 +73,23 @@ src/
 - **Cache**: IndexedDB `cache` store — LRU eviction, keyed by text+lang+provider hash
 - **History**: IndexedDB `history` store — auto-increment, indexed by `createdAt`
 - Both IndexedDB stores share a single `deepgloss` database (schema in `src/storage/idb-schema.ts`)
+
+## PDF translation support
+
+Chrome's built-in PDF viewer renders content inside an `<embed>` plugin element that content scripts cannot access. DeepGloss uses a sandbox + PDF.js approach (similar to Google Scholar PDF Reader):
+
+**Architecture:**
+- `chrome.webRequest.onHeadersReceived` intercepts PDF navigations and redirects to the bridge page
+- **Bridge page** (`src/pdfviewer/bridge.html`): runs in extension context, has `chrome.*` API access. Embeds the sandbox viewer in an iframe and bridges translation via `postMessage`
+- **Sandbox viewer** (`src/pdfviewer/index.html`): runs in isolated origin with relaxed CSP. Uses official pdf.js components (`PDFViewer`, `PDFLinkService`, `EventBus`) for rendering with full features (outline/TOC, zoom, text layer, search)
+- Translation flow: sandbox detects selection → `postMessage` to bridge → bridge uses `chrome.runtime.connect` to stream translation from service worker → `postMessage` result back to sandbox
+- The replacement is seamless — user sees PDF rendered with full translation support without extra clicks
+- Can be toggled off in Settings (`pdfViewerEnabled`) to restore Chrome's default PDF viewer
+
+**Why sandbox:**
+1. Relaxed CSP — PDF.js font rendering needs features blocked by extension CSP
+2. Security isolation — untrusted PDF content can't access `chrome.*` APIs
+3. Seamless UX — URL interception at the browser level, no manual redirection needed
 
 ## Message passing
 

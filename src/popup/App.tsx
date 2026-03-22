@@ -21,6 +21,7 @@ export function App() {
         cacheEnabled: true,
         cacheMaxSize: 1000,
         historyEnabled: true,
+        pdfViewerEnabled: true,
       };
       setSettings({ ...defaults, ...stored } as DeepGlossSettings);
     });
