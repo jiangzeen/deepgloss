@@ -155,49 +155,72 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 // ---- PDF interception ----
-// Redirect PDF navigations to our bridge page (which loads sandboxed PDF.js viewer)
-async function isPdfInterceptionEnabled(): Promise<boolean> {
-  const result = await chrome.storage.sync.get({ pdfViewerEnabled: true });
-  return result.pdfViewerEnabled;
+// MV3 strategy:
+// 1. declarativeNetRequest: static rules redirect .pdf URLs (instant, before page loads)
+// 2. webRequest.onHeadersReceived: detect PDFs by Content-Type header, then
+//    use chrome.tabs.update to redirect (for PDFs without .pdf extension)
+
+const PDF_REDIRECT_RULE_ID = 1;
+
+function getBridgeUrl(pdfUrl: string): string {
+  return chrome.runtime.getURL(
+    `src/pdfviewer/bridge.html?url=${encodeURIComponent(pdfUrl)}`,
+  );
 }
+
+/** Add or remove declarativeNetRequest rules based on setting */
+async function updatePdfRules(enabled: boolean): Promise<void> {
+  // Remove existing rule first
+  await chrome.declarativeNetRequest.updateDynamicRules({
+    removeRuleIds: [PDF_REDIRECT_RULE_ID],
+  });
+
+  // declarativeNetRequest can't URL-encode the original URL into a query param,
+  // so we handle .pdf URLs the same way as Content-Type detection:
+  // via webRequest + tabs.update. The DNR rule is not used for now.
+  // All PDF interception goes through webRequest.onHeadersReceived below.
+  void enabled;
+}
+
+// For PDFs served without .pdf extension (detected by Content-Type header)
+let pdfInterceptionEnabled = true;
 
 chrome.webRequest.onHeadersReceived.addListener(
   (details) => {
-    // Only handle main frame navigations
-    if (details.type !== 'main_frame') return;
+    if (details.type !== 'main_frame' || !pdfInterceptionEnabled) return;
 
-    // Check Content-Type header for PDF
+    // Skip if already our bridge page
+    if (details.url.startsWith(chrome.runtime.getURL(''))) return;
+
+    // Check if this is a PDF: by Content-Type header or URL extension
     const contentType = details.responseHeaders?.find(
       (h) => h.name.toLowerCase() === 'content-type',
     );
     const isPdf =
       contentType?.value?.toLowerCase().includes('application/pdf') ||
-      details.url.match(/\.pdf(\?|#|$)/i);
+      /\.pdf(\?|#|$)/i.test(details.url);
 
     if (!isPdf) return;
 
-    // Check if feature is enabled (async, but we need to redirect synchronously)
-    // Use a cached flag that's updated on storage change
-    if (!pdfInterceptionEnabled) return;
-
-    const bridgeUrl = chrome.runtime.getURL(
-      `src/pdfviewer/bridge.html?url=${encodeURIComponent(details.url)}`,
-    );
-
-    return { redirectUrl: bridgeUrl };
+    // Redirect via tabs.update (non-blocking, MV3 compatible)
+    const bridgeUrl = getBridgeUrl(details.url);
+    chrome.tabs.update(details.tabId, { url: bridgeUrl });
   },
   { urls: ['<all_urls>'] },
   ['responseHeaders'],
 );
 
-// Cache the pdfViewerEnabled flag for synchronous access
-let pdfInterceptionEnabled = true;
+// Initialize PDF rules
 chrome.storage.sync.get({ pdfViewerEnabled: true }, (result) => {
   pdfInterceptionEnabled = result.pdfViewerEnabled;
+  updatePdfRules(result.pdfViewerEnabled);
 });
+
+// Update rules when setting changes
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'sync' && changes.pdfViewerEnabled !== undefined) {
     pdfInterceptionEnabled = changes.pdfViewerEnabled.newValue;
+    updatePdfRules(changes.pdfViewerEnabled.newValue);
   }
 });
 

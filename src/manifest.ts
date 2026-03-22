@@ -5,7 +5,7 @@ export default defineManifest({
   name: 'DeepGloss',
   version: '0.1.0',
   description: 'AI-powered text selection translation',
-  permissions: ['storage', 'activeTab', 'contextMenus', 'webRequest'],
+  permissions: ['storage', 'activeTab', 'contextMenus', 'webRequest', 'declarativeNetRequest', 'tabs'],
   host_permissions: [
     'https://api.openai.com/*',
     'https://translate.googleapis.com/*',
