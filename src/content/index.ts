@@ -44,6 +44,7 @@ class DeepGlossContentScript {
         cacheEnabled: true,
         cacheMaxSize: 1000,
         historyEnabled: true,
+        pdfViewerEnabled: true,
       };
     }
 

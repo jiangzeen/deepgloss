@@ -5,10 +5,11 @@ export default defineManifest({
   name: 'DeepGloss',
   version: '0.1.0',
   description: 'AI-powered text selection translation',
-  permissions: ['storage', 'activeTab', 'contextMenus'],
+  permissions: ['storage', 'activeTab', 'contextMenus', 'webRequest', 'declarativeNetRequest', 'tabs'],
   host_permissions: [
     'https://api.openai.com/*',
     'https://translate.googleapis.com/*',
+    '<all_urls>',
   ],
   background: {
     service_worker: 'src/background/service-worker.ts',
@@ -39,4 +40,13 @@ export default defineManifest({
     '48': 'icons/icon-48.png',
     '128': 'icons/icon-128.png',
   },
+  sandbox: {
+    pages: ['src/pdfviewer/index.html'],
+  },
+  web_accessible_resources: [
+    {
+      resources: ['src/pdfviewer/index.html', 'src/pdfviewer/*'],
+      matches: ['<all_urls>'],
+    },
+  ],
 });
