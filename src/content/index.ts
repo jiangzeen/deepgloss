@@ -170,6 +170,13 @@ class DeepGlossContentScript {
   }
 }
 
-// Bootstrap
-const deepgloss = new DeepGlossContentScript();
-deepgloss.init();
+// Skip initialization on extension pages (CRXJS dev mode may inject here)
+// and PDF documents (they will be redirected to the DeepGloss PDF viewer)
+const shouldSkip =
+  location.protocol === 'chrome-extension:' ||
+  document.contentType === 'application/pdf';
+
+if (!shouldSkip) {
+  const deepgloss = new DeepGlossContentScript();
+  deepgloss.init();
+}

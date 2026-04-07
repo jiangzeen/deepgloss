@@ -59,6 +59,13 @@ registerMessageHandler(async (msg: ContentToBackgroundMessage): Promise<Backgrou
   }
 });
 
+// ---- Bridge page messages (internal, not typed via ContentToBackgroundMessage) ----
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (msg?.type === 'DISABLE_PDF_ONCE' && sender.tab?.id) {
+    pdfBypassTabs.add(sender.tab.id);
+  }
+});
+
 // ---- Streaming via long-lived ports ----
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== STREAM_PORT_NAME) return;
@@ -155,12 +162,21 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 // ---- PDF interception ----
-// MV3 strategy:
-// 1. declarativeNetRequest: static rules redirect .pdf URLs (instant, before page loads)
-// 2. webRequest.onHeadersReceived: detect PDFs by Content-Type header, then
-//    use chrome.tabs.update to redirect (for PDFs without .pdf extension)
+// Two-layer strategy:
+// 1. declarativeNetRequest: redirect .pdf URLs at the network level (instant, before
+//    Chrome's PDF plugin loads — prevents crash from competing navigations)
+//    Uses hash fragment to pass the original URL (no encoding needed).
+// 2. webRequest.onHeadersReceived: fallback for PDFs served without .pdf extension,
+//    detected by Content-Type header. Uses delayed chrome.tabs.update.
 
 const PDF_REDIRECT_RULE_ID = 1;
+
+// Track tabs currently being redirected to prevent duplicate redirects
+const redirectingTabs = new Set<number>();
+// Tabs where PDF interception is temporarily disabled (for fallback link in dev mode)
+const pdfBypassTabs = new Set<number>();
+
+let pdfInterceptionEnabled = true;
 
 function getBridgeUrl(pdfUrl: string): string {
   return chrome.runtime.getURL(
@@ -168,43 +184,78 @@ function getBridgeUrl(pdfUrl: string): string {
   );
 }
 
-/** Add or remove declarativeNetRequest rules based on setting */
+/** Add or remove declarativeNetRequest rules for .pdf URL interception */
 async function updatePdfRules(enabled: boolean): Promise<void> {
-  // Remove existing rule first
+  // Always remove existing rules first
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: [PDF_REDIRECT_RULE_ID],
   });
 
-  // declarativeNetRequest can't URL-encode the original URL into a query param,
-  // so we handle .pdf URLs the same way as Content-Type detection:
-  // via webRequest + tabs.update. The DNR rule is not used for now.
-  // All PDF interception goes through webRequest.onHeadersReceived below.
-  void enabled;
+  if (!enabled) return;
+
+  // Redirect .pdf URLs at the network level via DNR.
+  // This fires BEFORE the response is received, so Chrome's PDF plugin never loads.
+  // The original URL is passed as a hash fragment (no URL-encoding needed).
+  const bridgeBase = chrome.runtime.getURL('src/pdfviewer/bridge.html');
+  await chrome.declarativeNetRequest.updateDynamicRules({
+    addRules: [{
+      id: PDF_REDIRECT_RULE_ID,
+      priority: 1,
+      action: {
+        type: 'redirect' as chrome.declarativeNetRequest.RuleActionType,
+        redirect: {
+          // \\0 = the full matched URL
+          regexSubstitution: `${bridgeBase}#\\0`,
+        },
+      },
+      condition: {
+        // Match http(s) URLs ending in .pdf (optionally followed by query/fragment)
+        regexFilter: '^https?://.*\\.pdf(\\?[^#]*)?(#.*)?$',
+        resourceTypes: ['main_frame' as chrome.declarativeNetRequest.ResourceType],
+      },
+    }],
+  });
 }
 
-// For PDFs served without .pdf extension (detected by Content-Type header)
-let pdfInterceptionEnabled = true;
-
+// Fallback: webRequest detects PDFs by Content-Type header (for URLs without .pdf extension)
 chrome.webRequest.onHeadersReceived.addListener(
   (details) => {
     if (details.type !== 'main_frame' || !pdfInterceptionEnabled) return;
 
-    // Skip if already our bridge page
+    // Skip if already our bridge/extension page
     if (details.url.startsWith(chrome.runtime.getURL(''))) return;
 
-    // Check if this is a PDF: by Content-Type header or URL extension
+    // Skip if this tab is already being redirected
+    if (redirectingTabs.has(details.tabId)) return;
+
+    // Skip if this tab has a one-time bypass
+    if (pdfBypassTabs.has(details.tabId)) {
+      pdfBypassTabs.delete(details.tabId);
+      return;
+    }
+
+    // Skip .pdf URLs — already handled by DNR rule (no need for tabs.update)
+    if (/\.pdf(\?|#|$)/i.test(details.url)) return;
+
+    // Check Content-Type header for non-.pdf URLs serving PDF content
     const contentType = details.responseHeaders?.find(
       (h) => h.name.toLowerCase() === 'content-type',
     );
-    const isPdf =
-      contentType?.value?.toLowerCase().includes('application/pdf') ||
-      /\.pdf(\?|#|$)/i.test(details.url);
+    if (!contentType?.value?.toLowerCase().includes('application/pdf')) return;
 
-    if (!isPdf) return;
+    // Mark tab to prevent duplicate redirects
+    redirectingTabs.add(details.tabId);
 
-    // Redirect via tabs.update (non-blocking, MV3 compatible)
+    // Use setTimeout(0) to let Chrome finish processing the current response
+    // before navigating, which avoids crashing the tab.
     const bridgeUrl = getBridgeUrl(details.url);
-    chrome.tabs.update(details.tabId, { url: bridgeUrl });
+    setTimeout(() => {
+      chrome.tabs.update(details.tabId, { url: bridgeUrl }).catch(() => {
+        // Tab may have been closed
+      }).finally(() => {
+        setTimeout(() => redirectingTabs.delete(details.tabId), 2000);
+      });
+    }, 0);
   },
   { urls: ['<all_urls>'] },
   ['responseHeaders'],
