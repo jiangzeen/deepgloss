@@ -10,6 +10,52 @@ import type {
   TranslateErrorResponse,
 } from '@/messaging/types';
 
+/**
+ * Detect if text is predominantly in the given language using Unicode ranges.
+ */
+function isNativeLanguage(text: string, nativeLang: string): boolean {
+  const sample = text.trim().slice(0, 200);
+  if (!sample) return false;
+
+  const lang = nativeLang.toLowerCase().split('-')[0];
+  let matchCount = 0;
+  let totalCount = 0;
+
+  for (const ch of sample) {
+    if (/\s|\d|[.,!?;:'"()[\]{}\-—–…·\/\\@#$%^&*+=<>~`|]/.test(ch)) continue;
+    totalCount++;
+    switch (lang) {
+      case 'zh':
+        if (/[\u4e00-\u9fff\u3400-\u4dbf]/.test(ch)) matchCount++;
+        break;
+      case 'ja':
+        if (/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]/.test(ch)) matchCount++;
+        break;
+      case 'ko':
+        if (/[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]/.test(ch)) matchCount++;
+        break;
+      case 'ar':
+        if (/[\u0600-\u06ff]/.test(ch)) matchCount++;
+        break;
+      case 'hi':
+        if (/[\u0900-\u097f]/.test(ch)) matchCount++;
+        break;
+      case 'th':
+        if (/[\u0e00-\u0e7f]/.test(ch)) matchCount++;
+        break;
+      case 'ru': case 'uk':
+        if (/[\u0400-\u04ff]/.test(ch)) matchCount++;
+        break;
+      default:
+        if (/[a-zA-Z\u00c0-\u024f]/.test(ch)) matchCount++;
+        break;
+    }
+  }
+
+  if (totalCount === 0) return false;
+  return matchCount / totalCount > 0.5;
+}
+
 class DeepGlossContentScript {
   private settings: DeepGlossSettings | null = null;
   private selectionDetector: SelectionDetector;
@@ -36,6 +82,8 @@ class DeepGlossContentScript {
         providers: {},
         sourceLang: 'auto',
         targetLang: 'zh-CN',
+        secondLang: 'en',
+        autoTargetLang: true,
         triggerMode: 'icon',
         shortcutKey: 'Alt+T',
         cardPosition: 'below',
@@ -98,6 +146,16 @@ class DeepGlossContentScript {
     });
   }
 
+  private resolveTargetLang(text: string): string {
+    if (!this.settings || !this.settings.autoTargetLang || !this.settings.secondLang) {
+      return this.settings?.targetLang || 'zh-CN';
+    }
+    if (isNativeLanguage(text, this.settings.targetLang)) {
+      return this.settings.secondLang;
+    }
+    return this.settings.targetLang;
+  }
+
   private async startTranslation(info: SelectionInfo): Promise<void> {
     if (!this.settings || !this.cardHost) return;
 
@@ -106,6 +164,8 @@ class DeepGlossContentScript {
     // Disconnect previous stream if any
     this.currentPort?.disconnect();
     this.currentPort = null;
+
+    const targetLang = this.resolveTargetLang(info.text);
 
     this.cardHost.show(
       info.rect,
@@ -123,7 +183,7 @@ class DeepGlossContentScript {
           payload: {
             text: info.text,
             sourceLang: this.settings.sourceLang,
-            targetLang: this.settings.targetLang,
+            targetLang,
           },
         });
         if (cacheResp.type === 'CACHE_HIT' && cacheResp.payload) {
@@ -141,7 +201,7 @@ class DeepGlossContentScript {
       payload: {
         text: info.text,
         sourceLang: this.settings.sourceLang,
-        targetLang: this.settings.targetLang,
+        targetLang,
         context: info.context || undefined,
       },
     });

@@ -5,6 +5,8 @@ export interface DeepGlossSettings {
   providers: Record<string, ProviderConfig>;
   sourceLang: string;
   targetLang: string;
+  secondLang: string;
+  autoTargetLang: boolean;
   triggerMode: 'icon' | 'auto' | 'shortcut';
   shortcutKey: string;
   cardPosition: 'below' | 'sidebar';
@@ -21,6 +23,8 @@ const DEFAULTS: DeepGlossSettings = {
   providers: {},
   sourceLang: 'auto',
   targetLang: 'zh-CN',
+  secondLang: 'en',
+  autoTargetLang: true,
   triggerMode: 'icon',
   shortcutKey: 'Alt+T',
   cardPosition: 'below',

@@ -70,7 +70,7 @@ export function ProviderConfig({ settings, onUpdate }: Props) {
           </select>
         </div>
         <div style={{ flex: 1 }}>
-          <label style={labelStyle}>Target Language</label>
+          <label style={labelStyle}>Target Language (Native)</label>
           <select
             style={selectStyle}
             value={settings.targetLang}
@@ -83,6 +83,49 @@ export function ProviderConfig({ settings, onUpdate }: Props) {
             ))}
           </select>
         </div>
+      </div>
+
+      <div style={{
+        padding: '10px 12px',
+        background: '#f5f7ff',
+        borderRadius: '8px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <input
+            type="checkbox"
+            id="autoTargetLang"
+            checked={settings.autoTargetLang}
+            onChange={(e) => onUpdate('autoTargetLang', (e.target as HTMLInputElement).checked)}
+            style={{ margin: 0 }}
+          />
+          <label for="autoTargetLang" style={{ fontSize: '13px', color: '#333', cursor: 'pointer' }}>
+            Auto switch target language / 自动切换目标语言
+          </label>
+        </div>
+        {settings.autoTargetLang && (
+          <div>
+            <label style={labelStyle}>Second Language / 第二语言</label>
+            <select
+              style={selectStyle}
+              value={settings.secondLang}
+              onChange={(e) => onUpdate('secondLang', (e.target as HTMLSelectElement).value)}
+            >
+              {LANGUAGES.filter((l) => l.code !== 'auto').map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.nativeName} ({lang.name})
+                </option>
+              ))}
+            </select>
+            <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#888', lineHeight: '1.5' }}>
+              When detected language = native language, translate to second language; otherwise translate to native language.
+              <br />
+              当检测到的语言为母语时，翻译为第二语言；否则翻译为母语。
+            </p>
+          </div>
+        )}
       </div>
 
       {settings.activeProvider === 'openai-compatible' && (

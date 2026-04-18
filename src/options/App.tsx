@@ -9,6 +9,8 @@ const DEFAULTS: DeepGlossSettings = {
   providers: {},
   sourceLang: 'auto',
   targetLang: 'zh-CN',
+  secondLang: 'en',
+  autoTargetLang: true,
   triggerMode: 'icon',
   shortcutKey: 'Alt+T',
   cardPosition: 'below',

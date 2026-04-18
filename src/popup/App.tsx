@@ -21,6 +21,8 @@ export function App() {
         providers: {},
         sourceLang: 'auto',
         targetLang: 'zh-CN',
+        secondLang: 'en',
+        autoTargetLang: true,
         triggerMode: 'icon',
         shortcutKey: 'Alt+T',
         cardPosition: 'below',
@@ -93,6 +95,8 @@ export function App() {
       <TranslateInput
         sourceLang={settings.sourceLang}
         targetLang={settings.targetLang}
+        secondLang={settings.secondLang}
+        autoTargetLang={settings.autoTargetLang}
         onTranslate={handleTranslate}
         onAbort={handleAbort}
         isTranslating={isTranslating}

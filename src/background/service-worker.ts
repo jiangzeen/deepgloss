@@ -1,10 +1,64 @@
 import { loadSettings } from '@/storage/settings';
+import type { DeepGlossSettings } from '@/storage/settings';
 import { TranslationCache } from '@/storage/cache';
 import { TranslationHistory } from '@/storage/history';
 import { ProviderRegistry } from '@/providers/provider-registry';
 import { registerMessageHandler } from '@/messaging/handler';
 import { STREAM_PORT_NAME } from '@/shared/constants';
 import type { ContentToBackgroundMessage, BackgroundToContentMessage } from '@/messaging/types';
+
+/**
+ * Detect language of text using Google Translate API.
+ * Returns a language code like 'en', 'zh-CN', 'ja', etc.
+ */
+async function detectLanguage(text: string): Promise<string | null> {
+  try {
+    const url = new URL('https://translate.googleapis.com/translate_a/single');
+    url.searchParams.set('client', 'gtx');
+    url.searchParams.set('sl', 'auto');
+    url.searchParams.set('tl', 'en');
+    url.searchParams.set('dt', 't');
+    url.searchParams.set('dj', '1');
+    // Only send first 100 chars for detection
+    url.searchParams.set('q', text.slice(0, 100));
+    const resp = await fetch(url.toString());
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return (data.src as string) || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the actual target language based on auto-detection settings.
+ * If autoTargetLang is enabled:
+ *   - detected == targetLang (native) → translate to secondLang
+ *   - detected != targetLang → translate to targetLang (native)
+ */
+async function resolveTargetLang(
+  text: string,
+  requestTargetLang: string,
+  settings: DeepGlossSettings,
+): Promise<string> {
+  if (!settings.autoTargetLang || !settings.secondLang) {
+    return requestTargetLang;
+  }
+
+  const detected = await detectLanguage(text);
+  if (!detected) return requestTargetLang;
+
+  // Normalize for comparison: 'zh-CN' and 'zh' should match
+  const normalize = (code: string) => code.toLowerCase().split('-')[0];
+
+  if (normalize(detected) === normalize(settings.targetLang)) {
+    // Input is in native language → translate to second language
+    return settings.secondLang;
+  } else {
+    // Input is NOT in native language → translate to native language
+    return settings.targetLang;
+  }
+}
 
 const cache = new TranslationCache();
 const history = new TranslationHistory();
@@ -35,15 +89,17 @@ registerMessageHandler(async (msg: ContentToBackgroundMessage): Promise<Backgrou
     case 'TRANSLATE': {
       const settings = await loadSettings();
       const provider = registry.get(msg.payload.providerId || settings.activeProvider);
-      const result = await provider.translate(msg.payload);
+      const finalTargetLang = await resolveTargetLang(msg.payload.text, msg.payload.targetLang, settings);
+      const translationPayload = { ...msg.payload, targetLang: finalTargetLang };
+      const result = await provider.translate(translationPayload);
       // Cache and history (fire and forget)
-      cache.set(msg.payload.text, msg.payload.sourceLang, msg.payload.targetLang, result);
+      cache.set(msg.payload.text, msg.payload.sourceLang, finalTargetLang, result);
       if (settings.historyEnabled) {
         history.add({
           sourceText: msg.payload.text,
           translatedText: result.text,
           sourceLang: msg.payload.sourceLang,
-          targetLang: msg.payload.targetLang,
+          targetLang: finalTargetLang,
           providerId: msg.payload.providerId || settings.activeProvider,
           url: '',
         });
@@ -77,9 +133,11 @@ chrome.runtime.onConnect.addListener((port) => {
 
     const settings = await loadSettings();
     const provider = registry.get(msg.payload.providerId || settings.activeProvider);
+    const finalTargetLang = await resolveTargetLang(msg.payload.text, msg.payload.targetLang, settings);
+    const streamPayload = { ...msg.payload, targetLang: finalTargetLang };
 
     if (provider.translateStream) {
-      const { abort, done } = provider.translateStream(msg.payload, (chunk, isDone) => {
+      const { abort, done } = provider.translateStream(streamPayload, (chunk, isDone) => {
         try {
           port.postMessage({
             type: 'TRANSLATE_STREAM_CHUNK',
@@ -93,13 +151,13 @@ chrome.runtime.onConnect.addListener((port) => {
 
       try {
         const result = await done;
-        cache.set(msg.payload.text, msg.payload.sourceLang, msg.payload.targetLang, result);
+        cache.set(msg.payload.text, msg.payload.sourceLang, finalTargetLang, result);
         if (settings.historyEnabled) {
           history.add({
             sourceText: msg.payload.text,
             translatedText: result.text,
             sourceLang: msg.payload.sourceLang,
-            targetLang: msg.payload.targetLang,
+            targetLang: finalTargetLang,
             providerId: msg.payload.providerId || settings.activeProvider,
             url: '',
           });
@@ -119,12 +177,12 @@ chrome.runtime.onConnect.addListener((port) => {
     } else {
       // Fallback: non-streaming provider
       try {
-        const result = await provider.translate(msg.payload);
+        const result = await provider.translate(streamPayload);
         port.postMessage({
           type: 'TRANSLATE_STREAM_CHUNK',
           payload: { chunk: result.text, done: true },
         });
-        cache.set(msg.payload.text, msg.payload.sourceLang, msg.payload.targetLang, result);
+        cache.set(msg.payload.text, msg.payload.sourceLang, finalTargetLang, result);
       } catch (err) {
         try {
           port.postMessage({
