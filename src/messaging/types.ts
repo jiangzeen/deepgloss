@@ -1,5 +1,6 @@
-import type { TranslationSegment } from '@/providers/types';
+import type { DeepReadResult, TranslationSegment } from '@/providers/types';
 import type { DeepGlossSettings } from '@/storage/settings';
+import type { WordbookEntry } from '@/storage/wordbook';
 
 // ---- Content -> Background ----
 
@@ -39,6 +40,44 @@ export interface GetSettingsMessage {
   type: 'GET_SETTINGS';
 }
 
+export interface DeepReadMessage {
+  type: 'DEEP_READ';
+  payload: {
+    text: string;
+    sourceLang: string;
+    targetLang: string;
+    context?: string;
+    translatedText?: string;
+    providerId?: string;
+  };
+}
+
+export interface SaveWordMessage {
+  type: 'SAVE_WORD';
+  payload: {
+    deepRead: DeepReadResult;
+    sourceLang: string;
+    targetLang: string;
+    providerId: string;
+    sourceUrl: string;
+  };
+}
+
+export interface GetWordMessage {
+  type: 'GET_WORD';
+  payload: { term: string; sourceLang: string; targetLang: string };
+}
+
+export interface ListWordsMessage {
+  type: 'LIST_WORDS';
+  payload?: { limit?: number };
+}
+
+export interface RemoveWordMessage {
+  type: 'REMOVE_WORD';
+  payload: { termKey: string };
+}
+
 // ---- Background -> Content ----
 
 export interface TranslateResultResponse {
@@ -66,6 +105,31 @@ export interface SettingsResponse {
   payload: DeepGlossSettings;
 }
 
+export interface DeepReadResultResponse {
+  type: 'DEEP_READ_RESULT';
+  payload: { result: DeepReadResult; saved: boolean };
+}
+
+export interface WordSavedResponse {
+  type: 'WORD_SAVED';
+  payload: WordbookEntry;
+}
+
+export interface WordLookupResponse {
+  type: 'WORD_LOOKUP';
+  payload: WordbookEntry | null;
+}
+
+export interface WordListResponse {
+  type: 'WORD_LIST';
+  payload: WordbookEntry[];
+}
+
+export interface WordRemovedResponse {
+  type: 'WORD_REMOVED';
+  payload: { termKey: string };
+}
+
 // ---- Background -> Content (tab message for context menu) ----
 
 export interface ContextMenuTranslateMessage {
@@ -80,13 +144,23 @@ export type ContentToBackgroundMessage =
   | TranslateStreamStartMessage
   | TranslateStreamCancelMessage
   | CacheLookupMessage
-  | GetSettingsMessage;
+  | GetSettingsMessage
+  | DeepReadMessage
+  | SaveWordMessage
+  | GetWordMessage
+  | ListWordsMessage
+  | RemoveWordMessage;
 
 export type BackgroundToContentMessage =
   | TranslateResultResponse
   | TranslateStreamChunkResponse
   | TranslateErrorResponse
   | CacheHitResponse
-  | SettingsResponse;
+  | SettingsResponse
+  | DeepReadResultResponse
+  | WordSavedResponse
+  | WordLookupResponse
+  | WordListResponse
+  | WordRemovedResponse;
 
 export type TabMessage = ContextMenuTranslateMessage;

@@ -1,5 +1,5 @@
 import type { DBSchema } from 'idb';
-import type { TranslationSegment } from '@/providers/types';
+import type { DeepReadResult, TranslationSegment } from '@/providers/types';
 
 export interface DeepGlossSchema extends DBSchema {
   cache: {
@@ -28,6 +28,24 @@ export interface DeepGlossSchema extends DBSchema {
     };
     indexes: {
       createdAt: number;
+    };
+  };
+  wordbook: {
+    key: string;
+    value: {
+      termKey: string;
+      term: string;
+      sourceLang: string;
+      targetLang: string;
+      providerId: string;
+      sourceUrl: string;
+      deepRead: DeepReadResult;
+      createdAt: number;
+      updatedAt: number;
+    };
+    indexes: {
+      updatedAt: number;
+      term: string;
     };
   };
 }

@@ -9,10 +9,25 @@ import type {
   TranslateStreamChunkResponse,
   TranslateErrorResponse,
 } from '@/messaging/types';
+import type { DeepReadResult } from '@/providers/types';
 
 /**
  * Detect if text is predominantly in the given language using Unicode ranges.
  */
+
+function isDeepReadCandidate(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length < 2 || trimmed.length > 80) return false;
+  if (!/\p{L}/u.test(trimmed)) return false;
+  if (/[.!?。！？]\s+/.test(trimmed)) return false;
+
+  const words = trimmed.split(/[\s/]+/).filter(Boolean);
+  if (words.length > 6) return false;
+
+  const punctuationCount = (trimmed.match(/[,;:，；：]/g) || []).length;
+  return punctuationCount <= 2;
+}
+
 function isNativeLanguage(text: string, nativeLang: string): boolean {
   const sample = text.trim().slice(0, 200);
   if (!sample) return false;
@@ -156,6 +171,81 @@ class DeepGlossContentScript {
     return this.settings.targetLang;
   }
 
+  private async requestDeepRead(info: SelectionInfo, targetLang: string): Promise<void> {
+    if (!this.settings || !this.cardHost) return;
+
+    this.cardHost.setDeepReadLoading();
+
+    try {
+      const resp = await sendMessage({
+        type: 'DEEP_READ',
+        payload: {
+          text: info.text,
+          sourceLang: this.settings.sourceLang,
+          targetLang,
+          context: info.context || undefined,
+          translatedText: this.cardHost.getCurrentResultText() || undefined,
+          providerId: this.settings.activeProvider,
+        },
+      });
+
+      if (resp.type === 'DEEP_READ_RESULT') {
+        this.cardHost.renderDeepRead(
+          resp.payload.result,
+          resp.payload.saved,
+          () => this.speak(resp.payload.result),
+          (button) => this.saveWord(resp.payload.result, targetLang, button),
+        );
+      } else if (resp.type === 'TRANSLATE_ERROR') {
+        this.cardHost.showDeepReadError(resp.payload.message);
+      }
+    } catch (err) {
+      this.cardHost.showDeepReadError((err as Error).message);
+    }
+  }
+
+  private speak(result: DeepReadResult): void {
+    if (!('speechSynthesis' in window)) return;
+    const utterance = new SpeechSynthesisUtterance(result.normalizedTerm || result.term);
+    if (result.pronunciationLang) utterance.lang = result.pronunciationLang;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  }
+
+  private async saveWord(
+    result: DeepReadResult,
+    targetLang: string,
+    button: HTMLButtonElement,
+  ): Promise<void> {
+    if (!this.settings) return;
+
+    button.disabled = true;
+    button.textContent = '保存中';
+
+    try {
+      const resp = await sendMessage({
+        type: 'SAVE_WORD',
+        payload: {
+          deepRead: result,
+          sourceLang: this.settings.sourceLang,
+          targetLang,
+          providerId: this.settings.activeProvider,
+          sourceUrl: location.href,
+        },
+      });
+
+      if (resp.type === 'WORD_SAVED') {
+        button.textContent = '已收藏';
+      } else if (resp.type === 'TRANSLATE_ERROR') {
+        button.disabled = false;
+        button.textContent = '收藏失败';
+      }
+    } catch {
+      button.disabled = false;
+      button.textContent = '收藏失败';
+    }
+  }
+
   private async startTranslation(info: SelectionInfo): Promise<void> {
     if (!this.settings || !this.cardHost) return;
 
@@ -172,6 +262,10 @@ class DeepGlossContentScript {
       this.settings.cardPosition,
       info.text,
       this.settings.activeProvider,
+    );
+    this.cardHost.setDeepReadAvailable(
+      isDeepReadCandidate(info.text),
+      () => this.requestDeepRead(info, targetLang),
     );
     this.cardHost.setLoading(true);
 

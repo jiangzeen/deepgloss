@@ -1,10 +1,10 @@
-import { openDB, type IDBPDatabase } from 'idb';
+import type { IDBPDatabase } from 'idb';
 import type { TranslationSegment } from '@/providers/types';
 import type { DeepGlossSchema } from './idb-schema';
 import { hashKey } from '@/shared/utils';
+import { openDeepGlossDB } from './db';
 
 export class TranslationCache {
-  private db: IDBPDatabase<DeepGlossSchema> | null = null;
   private maxSize: number;
 
   constructor(maxSize = 1000) {
@@ -12,21 +12,7 @@ export class TranslationCache {
   }
 
   private async getDb(): Promise<IDBPDatabase<DeepGlossSchema>> {
-    if (!this.db) {
-      this.db = await openDB<DeepGlossSchema>('deepgloss', 1, {
-        upgrade(db) {
-          const cacheStore = db.createObjectStore('cache', { keyPath: 'key' });
-          cacheStore.createIndex('accessedAt', 'accessedAt');
-
-          const historyStore = db.createObjectStore('history', {
-            keyPath: 'id',
-            autoIncrement: true,
-          });
-          historyStore.createIndex('createdAt', 'createdAt');
-        },
-      });
-    }
-    return this.db;
+    return openDeepGlossDB();
   }
 
   static makeKey(text: string, sourceLang: string, targetLang: string, providerId?: string): string {
