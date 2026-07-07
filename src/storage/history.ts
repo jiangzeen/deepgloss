@@ -1,5 +1,6 @@
-import { openDB, type IDBPDatabase } from 'idb';
+import type { IDBPDatabase } from 'idb';
 import type { DeepGlossSchema } from './idb-schema';
+import { openDeepGlossDB } from './db';
 
 export interface HistoryEntry {
   id?: number;
@@ -13,27 +14,8 @@ export interface HistoryEntry {
 }
 
 export class TranslationHistory {
-  private db: IDBPDatabase<DeepGlossSchema> | null = null;
-
   private async getDb(): Promise<IDBPDatabase<DeepGlossSchema>> {
-    if (!this.db) {
-      this.db = await openDB<DeepGlossSchema>('deepgloss', 1, {
-        upgrade(db) {
-          if (!db.objectStoreNames.contains('cache')) {
-            const cacheStore = db.createObjectStore('cache', { keyPath: 'key' });
-            cacheStore.createIndex('accessedAt', 'accessedAt');
-          }
-          if (!db.objectStoreNames.contains('history')) {
-            const historyStore = db.createObjectStore('history', {
-              keyPath: 'id',
-              autoIncrement: true,
-            });
-            historyStore.createIndex('createdAt', 'createdAt');
-          }
-        },
-      });
-    }
-    return this.db;
+    return openDeepGlossDB();
   }
 
   async add(entry: Omit<HistoryEntry, 'id' | 'createdAt'>): Promise<void> {

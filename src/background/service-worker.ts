@@ -2,6 +2,7 @@ import { loadSettings } from '@/storage/settings';
 import type { DeepGlossSettings } from '@/storage/settings';
 import { TranslationCache } from '@/storage/cache';
 import { TranslationHistory } from '@/storage/history';
+import { WordbookStorage } from '@/storage/wordbook';
 import { ProviderRegistry } from '@/providers/provider-registry';
 import { registerMessageHandler } from '@/messaging/handler';
 import { STREAM_PORT_NAME } from '@/shared/constants';
@@ -62,6 +63,7 @@ async function resolveTargetLang(
 
 const cache = new TranslationCache();
 const history = new TranslationHistory();
+const wordbook = new WordbookStorage();
 const registry = new ProviderRegistry();
 
 // Initialize providers with saved config
@@ -84,6 +86,50 @@ registerMessageHandler(async (msg: ContentToBackgroundMessage): Promise<Backgrou
         msg.payload.targetLang,
       );
       return { type: 'CACHE_HIT', payload: result };
+    }
+
+    case 'DEEP_READ': {
+      const settings = await loadSettings();
+      const providerId = msg.payload.providerId || settings.activeProvider;
+      const provider = registry.get(providerId);
+      if (!provider.deepRead) {
+        throw new Error('当前翻译服务暂不支持深读，请切换到 OpenAI-compatible provider。');
+      }
+      const finalTargetLang = await resolveTargetLang(msg.payload.text, msg.payload.targetLang, settings);
+      const result = await provider.deepRead({
+        ...msg.payload,
+        targetLang: finalTargetLang,
+      });
+      const saved = await wordbook.get(
+        result.normalizedTerm || result.term,
+        msg.payload.sourceLang,
+        finalTargetLang,
+      );
+      return { type: 'DEEP_READ_RESULT', payload: { result, saved: Boolean(saved) } };
+    }
+
+    case 'SAVE_WORD': {
+      const entry = await wordbook.save(msg.payload);
+      return { type: 'WORD_SAVED', payload: entry };
+    }
+
+    case 'GET_WORD': {
+      const entry = await wordbook.get(
+        msg.payload.term,
+        msg.payload.sourceLang,
+        msg.payload.targetLang,
+      );
+      return { type: 'WORD_LOOKUP', payload: entry };
+    }
+
+    case 'LIST_WORDS': {
+      const entries = await wordbook.list(msg.payload?.limit || 100);
+      return { type: 'WORD_LIST', payload: entries };
+    }
+
+    case 'REMOVE_WORD': {
+      await wordbook.remove(msg.payload.termKey);
+      return { type: 'WORD_REMOVED', payload: { termKey: msg.payload.termKey } };
     }
 
     case 'TRANSLATE': {

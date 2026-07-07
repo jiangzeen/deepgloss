@@ -1,7 +1,7 @@
 import cardStyles from './card.css?inline';
 import { calculateCardPosition } from './card-position';
-import { renderTranslationResult } from './card-renderer';
-import type { TranslationSegment } from '@/providers/types';
+import { renderDeepReadResult, renderTranslationResult } from './card-renderer';
+import type { DeepReadResult, TranslationSegment } from '@/providers/types';
 
 /**
  * Shadow DOM host for the translation card.
@@ -17,9 +17,12 @@ export class CardHost {
   private loadingEl: HTMLDivElement;
   private resultEl: HTMLDivElement;
   private streamEl: HTMLDivElement;
+  private deepReadEl: HTMLDivElement;
   private errorEl: HTMLDivElement;
   private providerLabel: HTMLSpanElement;
+  private deepReadBtn: HTMLButtonElement;
   private copyBtn: HTMLButtonElement;
+  private onDeepReadRequest: (() => void) | null = null;
   private cardWidth: number;
   private cardTheme: string;
 
@@ -63,17 +66,25 @@ export class CardHost {
     this.loadingEl.innerHTML = '<div class="dg-spinner"></div>';
     this.resultEl = this.el('div', 'dg-result');
     this.streamEl = this.el('div', 'dg-stream');
+    this.deepReadEl = this.el('div', 'dg-deep-read');
     this.errorEl = this.el('div', 'dg-error');
-    body.append(this.loadingEl, this.resultEl, this.streamEl, this.errorEl);
+    body.append(this.loadingEl, this.resultEl, this.streamEl, this.deepReadEl, this.errorEl);
 
     // Footer
     const footer = this.el('div', 'dg-footer');
     this.providerLabel = this.el('span', '') as HTMLSpanElement;
+    this.deepReadBtn = document.createElement('button');
+    this.deepReadBtn.className = 'dg-copy-btn';
+    this.deepReadBtn.textContent = '深读';
+    this.deepReadBtn.style.display = 'none';
+    this.deepReadBtn.addEventListener('click', () => this.onDeepReadRequest?.());
     this.copyBtn = document.createElement('button');
     this.copyBtn.className = 'dg-copy-btn';
     this.copyBtn.textContent = 'Copy';
     this.copyBtn.addEventListener('click', () => this.copyResult());
-    footer.append(this.providerLabel, this.copyBtn);
+    const footerActions = this.el('div', 'dg-footer-actions');
+    footerActions.append(this.deepReadBtn, this.copyBtn);
+    footer.append(this.providerLabel, footerActions);
 
     // Assemble
     this.container.append(header, this.sourceEl, body, footer);
@@ -116,6 +127,13 @@ export class CardHost {
     this.loadingEl.style.display = loading ? 'flex' : 'none';
   }
 
+  setDeepReadAvailable(available: boolean, onRequest: (() => void) | null): void {
+    this.onDeepReadRequest = available ? onRequest : null;
+    this.deepReadBtn.style.display = available ? 'inline-flex' : 'none';
+    this.deepReadBtn.disabled = false;
+    this.deepReadBtn.textContent = '深读';
+  }
+
   appendStreamChunk(chunk: string): void {
     this.loadingEl.style.display = 'none';
     this.streamEl.style.display = 'block';
@@ -132,6 +150,39 @@ export class CardHost {
     this.streamEl.style.display = 'none';
     this.resultEl.style.display = 'block';
     renderTranslationResult(this.resultEl, segment);
+  }
+
+  setDeepReadLoading(): void {
+    this.deepReadBtn.disabled = true;
+    this.deepReadBtn.textContent = '加载中';
+    this.deepReadEl.style.display = 'block';
+    this.deepReadEl.innerHTML = '<div class="dg-deep-loading">正在生成深读词卡...</div>';
+  }
+
+  renderDeepRead(
+    result: DeepReadResult,
+    saved: boolean,
+    onSpeak: () => void,
+    onSave: (button: HTMLButtonElement) => void,
+  ): void {
+    this.deepReadBtn.disabled = false;
+    this.deepReadBtn.textContent = '深读';
+    this.deepReadEl.style.display = 'block';
+    renderDeepReadResult(this.deepReadEl, result, { saved, onSpeak, onSave });
+  }
+
+  showDeepReadError(message: string): void {
+    this.deepReadBtn.disabled = false;
+    this.deepReadBtn.textContent = '深读';
+    this.deepReadEl.style.display = 'block';
+    this.deepReadEl.innerHTML = '';
+    const error = this.el('div', 'dg-deep-error');
+    error.textContent = message;
+    this.deepReadEl.appendChild(error);
+  }
+
+  getCurrentResultText(): string {
+    return this.streamEl.textContent || this.resultEl.textContent || '';
   }
 
   showError(message: string): void {
@@ -157,8 +208,11 @@ export class CardHost {
     this.resultEl.innerHTML = '';
     this.streamEl.style.display = 'none';
     this.streamEl.textContent = '';
+    this.deepReadEl.style.display = 'none';
+    this.deepReadEl.innerHTML = '';
     this.errorEl.style.display = 'none';
     this.errorEl.textContent = '';
+    this.setDeepReadAvailable(false, null);
   }
 
   private copyResult(): void {

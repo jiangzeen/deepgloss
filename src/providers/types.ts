@@ -13,6 +13,34 @@ export interface GlossEntry {
   partOfSpeech?: string;
 }
 
+export interface DeepReadExample {
+  source: string;
+  translation?: string;
+}
+
+export interface DeepReadDefinition {
+  partOfSpeech?: string;
+  meaning: string;
+  translation?: string;
+  examples: DeepReadExample[];
+}
+
+export interface DeepReadResult {
+  term: string;
+  normalizedTerm: string;
+  phonetic?: string;
+  pronunciationLang?: string;
+  partOfSpeech?: string;
+  definitions: DeepReadDefinition[];
+  contextualMeaning?: string;
+  contextExplanation?: string;
+  sourceContext?: string;
+}
+
+export interface DeepReadRequest extends TranslationRequest {
+  translatedText?: string;
+}
+
 /** Streaming callback */
 export type StreamCallback = (chunk: string, done: boolean) => void;
 
@@ -49,6 +77,8 @@ export interface TranslationProvider {
   readonly capabilities: ProviderCapabilities;
 
   translate(req: TranslationRequest): Promise<TranslationSegment>;
+
+  deepRead?(req: DeepReadRequest): Promise<DeepReadResult>;
 
   translateStream?(
     req: TranslationRequest,

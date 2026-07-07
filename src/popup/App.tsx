@@ -5,6 +5,7 @@ import { TranslateInput } from './components/TranslateInput';
 import { TranslateResult } from './components/TranslateResult';
 import { QuickSettings } from './components/QuickSettings';
 import { ProviderStatus } from './components/ProviderStatus';
+import { WordbookPanel } from './components/WordbookPanel';
 
 export function App() {
   const [settings, setSettings] = useState<DeepGlossSettings | null>(null);
@@ -12,6 +13,7 @@ export function App() {
   const [isTranslating, setIsTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showWordbook, setShowWordbook] = useState(false);
   const portRef = useRef<chrome.runtime.Port | null>(null);
 
   useEffect(() => {
@@ -88,27 +90,48 @@ export function App() {
 
   return (
     <div style={{ padding: '12px', fontSize: '14px', fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '10px' }}>
         <h1 style={{ fontSize: '16px', margin: 0 }}>DeepGloss</h1>
+        <button
+          onClick={() => setShowWordbook(!showWordbook)}
+          style={{
+            padding: '4px 8px',
+            background: 'none',
+            border: '1px solid #ddd',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '12px',
+            color: '#555',
+          }}
+        >
+          {showWordbook ? '返回翻译' : '词库'}
+        </button>
       </div>
 
-      <TranslateInput
-        sourceLang={settings.sourceLang}
-        targetLang={settings.targetLang}
-        secondLang={settings.secondLang}
-        autoTargetLang={settings.autoTargetLang}
-        onTranslate={handleTranslate}
-        onAbort={handleAbort}
-        isTranslating={isTranslating}
-      />
+      {showWordbook ? (
+        <WordbookPanel />
+      ) : (
+        <>
+          <TranslateInput
+            sourceLang={settings.sourceLang}
+            targetLang={settings.targetLang}
+            secondLang={settings.secondLang}
+            autoTargetLang={settings.autoTargetLang}
+            onTranslate={handleTranslate}
+            onAbort={handleAbort}
+            isTranslating={isTranslating}
+          />
 
-      <TranslateResult
-        result={result}
-        isTranslating={isTranslating}
-        error={error}
-      />
+          <TranslateResult
+            result={result}
+            isTranslating={isTranslating}
+            error={error}
+          />
+        </>
+      )}
 
-      <div style={{ marginTop: '12px', borderTop: '1px solid #eee', paddingTop: '10px' }}>
+      {!showWordbook && (
+        <div style={{ marginTop: '12px', borderTop: '1px solid #eee', paddingTop: '10px' }}>
         <button
           onClick={() => setShowSettings(!showSettings)}
           style={{
@@ -150,7 +173,8 @@ export function App() {
             </button>
           </div>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

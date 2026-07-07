@@ -2,6 +2,8 @@ import type {
   TranslationProvider,
   TranslationRequest,
   TranslationSegment,
+  DeepReadRequest,
+  DeepReadResult,
   StreamCallback,
   ProviderCapabilities,
   ProviderConfig,
@@ -71,6 +73,30 @@ export class OpenAICompatibleProvider implements TranslationProvider {
     } catch (e) {
       return { valid: false, error: (e as Error).message };
     }
+  }
+
+  async deepRead(req: DeepReadRequest): Promise<DeepReadResult> {
+    if (!this.apiKey) {
+      throw new Error("Deep read requires an API key for the active AI provider.");
+    }
+
+    const resp = await fetch(this.getCompletionsUrl(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages: this.buildDeepReadMessages(req),
+        temperature: 0.2,
+      }),
+    });
+
+    if (!resp.ok) throw new Error(`API error: ${resp.status}`);
+    const data = await resp.json();
+    const content = data.choices?.[0]?.message?.content || "";
+    return this.parseDeepReadResponse(content, req);
   }
 
   async translate(req: TranslationRequest): Promise<TranslationSegment> {
@@ -153,6 +179,103 @@ export class OpenAICompatibleProvider implements TranslationProvider {
 
     onChunk("", true);
     return { text: fullText };
+  }
+
+  private buildDeepReadMessages(req: DeepReadRequest) {
+    const sourceLangDesc =
+      req.sourceLang === "auto" ? "the detected language" : req.sourceLang;
+
+    const schema = `{
+  "term": "selected word or short phrase",
+  "normalizedTerm": "dictionary headword or normalized phrase",
+  "phonetic": "IPA or common phonetic spelling when available",
+  "pronunciationLang": "BCP-47 language tag for speech synthesis, for example en-US",
+  "partOfSpeech": "primary part of speech",
+  "definitions": [
+    {
+      "partOfSpeech": "noun/verb/adjective/etc",
+      "meaning": "standard definition in the source language or English",
+      "translation": "concise explanation in the target language",
+      "examples": [
+        { "source": "natural example sentence", "translation": "target-language translation" }
+      ]
+    }
+  ],
+  "contextualMeaning": "meaning of the selected term in the supplied context",
+  "contextExplanation": "brief target-language explanation of why this meaning fits",
+  "sourceContext": "short source context excerpt"
+}`;
+
+    const userContent = [
+      `Selected term: ${JSON.stringify(req.text)}`,
+      `Source language: ${sourceLangDesc}`,
+      `Target language for explanations: ${req.targetLang}`,
+      req.translatedText ? `Existing quick translation: ${JSON.stringify(req.translatedText)}` : "",
+      req.context ? `Reading context: ${JSON.stringify(req.context.slice(0, 600))}` : "",
+    ].filter(Boolean).join("\n");
+
+    return [
+      {
+        role: "system" as const,
+        content: `You are a concise learner dictionary assistant. Return ONLY valid JSON matching this schema, with 1-3 common definitions and 1-2 examples per definition. Do not include markdown. Schema:\n${schema}`,
+      },
+      { role: "user" as const, content: userContent },
+    ];
+  }
+
+  private parseDeepReadResponse(content: string, req: DeepReadRequest): DeepReadResult {
+    const cleaned = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
+    let parsed: Partial<DeepReadResult> = {};
+
+    try {
+      parsed = JSON.parse(cleaned) as Partial<DeepReadResult>;
+    } catch {
+      const start = cleaned.indexOf("{");
+      const end = cleaned.lastIndexOf("}");
+      if (start >= 0 && end > start) {
+        parsed = JSON.parse(cleaned.slice(start, end + 1)) as Partial<DeepReadResult>;
+      } else {
+        throw new Error("Deep read response was not valid JSON.");
+      }
+    }
+
+    const normalizedTerm = (parsed.normalizedTerm || parsed.term || req.text).trim();
+    const definitions = Array.isArray(parsed.definitions)
+      ? parsed.definitions
+          .map((definition) => ({
+            partOfSpeech: definition.partOfSpeech,
+            meaning: definition.meaning || definition.translation || "",
+            translation: definition.translation,
+            examples: Array.isArray(definition.examples)
+              ? definition.examples
+                  .map((example) => ({
+                    source: example.source || "",
+                    translation: example.translation,
+                  }))
+                  .filter((example) => example.source)
+              : [],
+          }))
+          .filter((definition) => definition.meaning)
+      : [];
+
+    return {
+      term: (parsed.term || req.text).trim(),
+      normalizedTerm,
+      phonetic: parsed.phonetic,
+      pronunciationLang: parsed.pronunciationLang || this.inferSpeechLang(req.sourceLang),
+      partOfSpeech: parsed.partOfSpeech || definitions[0]?.partOfSpeech,
+      definitions,
+      contextualMeaning: parsed.contextualMeaning,
+      contextExplanation: parsed.contextExplanation,
+      sourceContext: parsed.sourceContext || req.context?.slice(0, 240),
+    };
+  }
+
+  private inferSpeechLang(sourceLang: string): string | undefined {
+    if (sourceLang === "auto") return undefined;
+    const base = sourceLang.toLowerCase().split("-")[0];
+    if (base === "en") return "en-US";
+    return sourceLang;
   }
 
   private buildMessages(req: TranslationRequest) {
