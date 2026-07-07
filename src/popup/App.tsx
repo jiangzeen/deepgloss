@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
 import type { DeepGlossSettings } from '@/storage/settings';
 import { STREAM_PORT_NAME } from '@/shared/constants';
+import { Button, StatusMessage } from '@/shared/ui';
 import { TranslateInput } from './components/TranslateInput';
 import { TranslateResult } from './components/TranslateResult';
 import { QuickSettings } from './components/QuickSettings';
@@ -39,7 +40,13 @@ export function App() {
     });
   }, []);
 
-  if (!settings) return <div style={{ padding: '16px' }}>Loading...</div>;
+  if (!settings) {
+    return (
+      <main className="dg-shell dg-popup-shell">
+        <StatusMessage>Loading settings...</StatusMessage>
+      </main>
+    );
+  }
 
   const updateSetting = async <K extends keyof DeepGlossSettings>(
     key: K,
@@ -89,92 +96,75 @@ export function App() {
   };
 
   return (
-    <div style={{ padding: '12px', fontSize: '14px', fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '10px' }}>
-        <h1 style={{ fontSize: '16px', margin: 0 }}>DeepGloss</h1>
-        <button
-          onClick={() => setShowWordbook(!showWordbook)}
-          style={{
-            padding: '4px 8px',
-            background: 'none',
-            border: '1px solid #ddd',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '12px',
-            color: '#555',
-          }}
+    <main className="dg-shell dg-popup-shell">
+      <header className="dg-topbar">
+        <h1 className="dg-title dg-title--compact">DeepGloss</h1>
+      </header>
+
+      <div className="dg-segmented" role="group" aria-label="Popup view">
+        <Button
+          variant="ghost"
+          size="compact"
+          aria-pressed={!showWordbook}
+          onClick={() => setShowWordbook(false)}
         >
-          {showWordbook ? '返回翻译' : '词库'}
-        </button>
+          翻译
+        </Button>
+        <Button
+          variant="ghost"
+          size="compact"
+          aria-pressed={showWordbook}
+          onClick={() => setShowWordbook(true)}
+        >
+          词库
+        </Button>
       </div>
 
-      {showWordbook ? (
-        <WordbookPanel />
-      ) : (
-        <>
-          <TranslateInput
-            sourceLang={settings.sourceLang}
-            targetLang={settings.targetLang}
-            secondLang={settings.secondLang}
-            autoTargetLang={settings.autoTargetLang}
-            onTranslate={handleTranslate}
-            onAbort={handleAbort}
-            isTranslating={isTranslating}
-          />
+      <div className="dg-divider">
+        {showWordbook ? (
+          <WordbookPanel />
+        ) : (
+          <>
+            <TranslateInput
+              sourceLang={settings.sourceLang}
+              targetLang={settings.targetLang}
+              secondLang={settings.secondLang}
+              autoTargetLang={settings.autoTargetLang}
+              onTranslate={handleTranslate}
+              onAbort={handleAbort}
+              isTranslating={isTranslating}
+            />
 
-          <TranslateResult
-            result={result}
-            isTranslating={isTranslating}
-            error={error}
-          />
-        </>
-      )}
+            <TranslateResult
+              result={result}
+              isTranslating={isTranslating}
+              error={error}
+            />
 
-      {!showWordbook && (
-        <div style={{ marginTop: '12px', borderTop: '1px solid #eee', paddingTop: '10px' }}>
-        <button
-          onClick={() => setShowSettings(!showSettings)}
-          style={{
-            width: '100%',
-            padding: '6px',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '12px',
-            color: '#888',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '4px',
-          }}
-        >
-          {showSettings ? '收起设置' : '快捷设置'}
-        </button>
+            <div className="dg-divider">
+              <Button
+                variant="ghost"
+                fullWidth
+                size="compact"
+                aria-expanded={showSettings}
+                onClick={() => setShowSettings(!showSettings)}
+              >
+                {showSettings ? '收起设置' : '快捷设置'}
+              </Button>
 
-        {showSettings && (
-          <div style={{ marginTop: '8px' }}>
-            <ProviderStatus activeProvider={settings.activeProvider} />
-            <QuickSettings settings={settings} onUpdate={updateSetting} />
-            <button
-              onClick={() => chrome.runtime.openOptionsPage()}
-              style={{
-                width: '100%',
-                padding: '8px',
-                marginTop: '10px',
-                background: 'none',
-                border: '1px solid #ddd',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '13px',
-                color: '#555',
-              }}
-            >
-              Open Settings
-            </button>
-          </div>
+              {showSettings && (
+                <div className="dg-stack">
+                  <ProviderStatus activeProvider={settings.activeProvider} />
+                  <QuickSettings settings={settings} onUpdate={updateSetting} />
+                  <Button fullWidth onClick={() => chrome.runtime.openOptionsPage()}>
+                    Open Settings
+                  </Button>
+                </div>
+              )}
+            </div>
+          </>
         )}
-        </div>
-      )}
-    </div>
+      </div>
+    </main>
   );
 }

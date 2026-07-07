@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { sendMessage } from '@/messaging/sender';
 import type { WordbookEntry } from '@/storage/wordbook';
+import { IconButton, StatusMessage } from '@/shared/ui';
 
 export function WordbookPanel() {
   const [words, setWords] = useState<WordbookEntry[]>([]);
@@ -33,87 +34,47 @@ export function WordbookPanel() {
     setWords((prev) => prev.filter((entry) => entry.termKey !== termKey));
   };
 
-  if (loading) {
-    return <div style={{ padding: '12px', color: '#777', fontSize: '13px' }}>加载词库...</div>;
-  }
-
-  if (error) {
-    return (
-      <div style={{
-        padding: '10px',
-        background: '#fef2f2',
-        border: '1px solid #fecaca',
-        borderRadius: '6px',
-        color: '#dc2626',
-        fontSize: '13px',
-      }}>
-        {error}
-      </div>
-    );
-  }
-
-  if (words.length === 0) {
-    return <div style={{ padding: '12px', color: '#777', fontSize: '13px' }}>暂无收藏词。</div>;
-  }
+  if (loading) return <StatusMessage>加载词库...</StatusMessage>;
+  if (error) return <StatusMessage tone="error">{error}</StatusMessage>;
+  if (words.length === 0) return <StatusMessage>暂无收藏词。</StatusMessage>;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <div className="dg-word-list" aria-label="收藏词列表">
       {words.map((entry) => {
         const firstDefinition = entry.deepRead.definitions[0];
         const meta = [entry.deepRead.phonetic, entry.deepRead.partOfSpeech].filter(Boolean).join(' · ');
         return (
-          <div key={entry.termKey} style={{
-            padding: '10px',
-            border: '1px solid #e5e7eb',
-            borderRadius: '8px',
-            background: '#fff',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 650, fontSize: '14px', color: '#222' }}>{entry.term}</div>
-                {meta && <div style={{ color: '#777', fontSize: '12px', marginTop: '1px' }}>{meta}</div>}
+          <article key={entry.termKey} className="dg-surface">
+            <div className="dg-word-card__header">
+              <div>
+                <div className="dg-word-card__term">{entry.term}</div>
+                {meta && <div className="dg-word-card__meta">{meta}</div>}
               </div>
-              <button
-                onClick={() => removeWord(entry.termKey)}
+              <IconButton
+                aria-label={`删除 ${entry.term}`}
                 title="删除"
-                style={{
-                  width: '24px',
-                  height: '24px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  background: '#fff',
-                  color: '#777',
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                }}
+                onClick={() => removeWord(entry.termKey)}
               >
                 ×
-              </button>
+              </IconButton>
             </div>
 
             {firstDefinition && (
-              <div style={{ marginTop: '6px', fontSize: '13px', color: '#333', lineHeight: 1.45 }}>
+              <div className="dg-word-card__body">
                 {firstDefinition.translation || firstDefinition.meaning}
               </div>
             )}
 
             {entry.deepRead.contextualMeaning && (
-              <div style={{ marginTop: '6px', fontSize: '12px', color: '#666', lineHeight: 1.45 }}>
-                {entry.deepRead.contextualMeaning}
-              </div>
+              <div className="dg-word-card__context">{entry.deepRead.contextualMeaning}</div>
             )}
 
             {entry.sourceUrl && (
-              <a
-                href={entry.sourceUrl}
-                target="_blank"
-                rel="noreferrer"
-                style={{ display: 'block', marginTop: '6px', color: '#64748b', fontSize: '11px', textDecoration: 'none' }}
-              >
+              <a className="dg-link" href={entry.sourceUrl} target="_blank" rel="noreferrer">
                 来源页面
               </a>
             )}
-          </div>
+          </article>
         );
       })}
     </div>
