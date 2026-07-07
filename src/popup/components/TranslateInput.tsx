@@ -1,5 +1,7 @@
+import type { JSX } from 'preact';
 import { useState, useRef, useEffect } from 'preact/hooks';
 import { LANGUAGES } from '@/shared/languages';
+import { Button, Field, SelectField } from '@/shared/ui';
 
 interface Props {
   sourceLang: string;
@@ -20,8 +22,6 @@ function isNativeLanguage(text: string, nativeLang: string): boolean {
   if (!sample) return false;
 
   const lang = nativeLang.toLowerCase().split('-')[0];
-
-  // Count characters matching the native language script
   let matchCount = 0;
   let totalCount = 0;
 
@@ -31,15 +31,12 @@ function isNativeLanguage(text: string, nativeLang: string): boolean {
 
     switch (lang) {
       case 'zh':
-        // CJK Unified Ideographs + Extensions
         if (/[\u4e00-\u9fff\u3400-\u4dbf]/.test(ch)) matchCount++;
         break;
       case 'ja':
-        // Hiragana + Katakana + CJK
         if (/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]/.test(ch)) matchCount++;
         break;
       case 'ko':
-        // Hangul
         if (/[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]/.test(ch)) matchCount++;
         break;
       case 'ar':
@@ -56,7 +53,6 @@ function isNativeLanguage(text: string, nativeLang: string): boolean {
         if (/[\u0400-\u04ff]/.test(ch)) matchCount++;
         break;
       default:
-        // Latin-based languages (en, fr, de, es, pt, it, nl, pl, vi)
         if (/[a-zA-Z\u00c0-\u024f]/.test(ch)) matchCount++;
         break;
     }
@@ -76,7 +72,6 @@ export function TranslateInput({ sourceLang, targetLang, secondLang, autoTargetL
     textareaRef.current?.focus();
   }, []);
 
-  // Auto-detect target language when text changes
   useEffect(() => {
     if (!autoTargetLang || !secondLang) return;
 
@@ -86,13 +81,7 @@ export function TranslateInput({ sourceLang, targetLang, secondLang, autoTargetL
       return;
     }
 
-    if (isNativeLanguage(trimmed, targetLang)) {
-      // Input is native language → translate to second language
-      setTgtLang(secondLang);
-    } else {
-      // Input is NOT native language → translate to native language
-      setTgtLang(targetLang);
-    }
+    setTgtLang(isNativeLanguage(trimmed, targetLang) ? secondLang : targetLang);
   }, [text, autoTargetLang, targetLang, secondLang]);
 
   const handleSubmit = () => {
@@ -101,89 +90,63 @@ export function TranslateInput({ sourceLang, targetLang, secondLang, autoTargetL
     onTranslate(trimmed, srcLang, tgtLang);
   };
 
-  const handleKeyDown = (e: KeyboardEvent) => {
+  const handleKeyDown = (e: JSX.TargetedKeyboardEvent<HTMLTextAreaElement>) => {
     if (e.ctrlKey && e.key === 'Enter') {
       e.preventDefault();
       handleSubmit();
     }
   };
 
-  const selectStyle: Record<string, string> = {
-    flex: '1',
-    padding: '4px 6px',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    fontSize: '12px',
-    background: '#fff',
-  };
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      <textarea
-        ref={textareaRef}
-        value={text}
-        onInput={(e) => setText((e.target as HTMLTextAreaElement).value)}
-        onKeyDown={handleKeyDown}
-        placeholder="输入或粘贴要翻译的文本"
-        style={{
-          width: '100%',
-          minHeight: '80px',
-          padding: '8px',
-          border: '1px solid #ddd',
-          borderRadius: '6px',
-          fontSize: '13px',
-          fontFamily: 'inherit',
-          resize: 'vertical',
-          boxSizing: 'border-box',
-          lineHeight: '1.4',
-        }}
-      />
+    <div className="dg-stack">
+      <Field id="translate-text" label="Text to translate" description="Press Ctrl+Enter to translate.">
+        <textarea
+          id="translate-text"
+          ref={textareaRef}
+          value={text}
+          onInput={(e) => setText((e.target as HTMLTextAreaElement).value)}
+          onKeyDown={handleKeyDown}
+          placeholder="输入或粘贴要翻译的文本"
+          className="dg-input dg-textarea"
+          aria-describedby="translate-text-description"
+        />
+      </Field>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <select
-          style={selectStyle}
+      <div className="dg-grid-2">
+        <SelectField
+          id="popup-source-lang"
+          label="Source"
+          compact
           value={srcLang}
           onChange={(e) => setSrcLang((e.target as HTMLSelectElement).value)}
         >
           {LANGUAGES.map((lang) => (
-            <option key={lang.code} value={lang.code}>
-              {lang.nativeName}
-            </option>
+            <option key={lang.code} value={lang.code}>{lang.nativeName}</option>
           ))}
-        </select>
+        </SelectField>
 
-        <span style={{ color: '#999', fontSize: '12px' }}>→</span>
-
-        <select
-          style={selectStyle}
+        <SelectField
+          id="popup-target-lang"
+          label="Target"
+          compact
           value={tgtLang}
           onChange={(e) => setTgtLang((e.target as HTMLSelectElement).value)}
         >
           {LANGUAGES.filter((l) => l.code !== 'auto').map((lang) => (
-            <option key={lang.code} value={lang.code}>
-              {lang.nativeName}
-            </option>
+            <option key={lang.code} value={lang.code}>{lang.nativeName}</option>
           ))}
-        </select>
+        </SelectField>
       </div>
 
-      <button
+      <Button
+        variant={isTranslating ? 'danger' : 'primary'}
+        fullWidth
         onClick={isTranslating ? onAbort : handleSubmit}
         disabled={!isTranslating && !text.trim()}
-        style={{
-          width: '100%',
-          padding: '7px',
-          background: isTranslating ? '#e74c3c' : (!text.trim() ? '#ccc' : '#4A90D9'),
-          color: '#fff',
-          border: 'none',
-          borderRadius: '6px',
-          cursor: !isTranslating && !text.trim() ? 'not-allowed' : 'pointer',
-          fontSize: '13px',
-          fontWeight: 500,
-        }}
+        aria-keyshortcuts="Control+Enter"
       >
         {isTranslating ? '停止翻译' : '翻译'}
-      </button>
+      </Button>
     </div>
   );
 }

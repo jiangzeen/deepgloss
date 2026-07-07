@@ -1,4 +1,5 @@
 import { useState } from 'preact/hooks';
+import { Button, StatusMessage } from '@/shared/ui';
 
 interface Props {
   result: string;
@@ -19,60 +20,25 @@ export function TranslateResult({ result, isTranslating, error }: Props) {
   };
 
   return (
-    <div style={{ marginTop: '8px' }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '4px',
-      }}>
-        <span style={{ fontSize: '12px', color: '#888' }}>
+    <section className="dg-stack dg-stack--tight" aria-labelledby="translate-result-title">
+      <div className="dg-result-header">
+        <span className="dg-meta-label" id="translate-result-title">
           翻译结果{isTranslating ? '（翻译中...）' : ''}
         </span>
         {result && (
-          <button
-            onClick={handleCopy}
-            style={{
-              background: 'none',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              padding: '2px 8px',
-              fontSize: '11px',
-              cursor: 'pointer',
-              color: copied ? '#27ae60' : '#666',
-            }}
-          >
+          <Button size="compact" onClick={handleCopy} aria-live="polite">
             {copied ? '已复制' : '复制'}
-          </button>
+          </Button>
         )}
       </div>
 
       {error ? (
-        <div style={{
-          padding: '8px',
-          background: '#fef2f2',
-          border: '1px solid #fecaca',
-          borderRadius: '6px',
-          fontSize: '13px',
-          color: '#dc2626',
-        }}>
-          {error}
-        </div>
+        <StatusMessage tone="error">{error}</StatusMessage>
       ) : (
-        <div style={{
-          padding: '8px',
-          background: '#f8f9fa',
-          border: '1px solid #e9ecef',
-          borderRadius: '6px',
-          fontSize: '13px',
-          lineHeight: '1.5',
-          minHeight: '40px',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-        }}>
-          {result || (isTranslating ? '' : '')}
+        <div className="dg-status dg-result" role="status" aria-live="polite" aria-atomic="false">
+          {result || (isTranslating ? '正在等待翻译结果...' : '')}
         </div>
       )}
-    </div>
+    </section>
   );
 }

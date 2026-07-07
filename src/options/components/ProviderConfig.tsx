@@ -1,32 +1,15 @@
+import { useState } from 'preact/hooks';
 import type { DeepGlossSettings } from '@/storage/settings';
-import type { ProviderConfig as ProviderConfigType } from '@/providers/types';
 import { LANGUAGES } from '@/shared/languages';
+import { Button, SelectField, TextInputField, ToggleRow } from '@/shared/ui';
 
 interface Props {
   settings: DeepGlossSettings;
   onUpdate: <K extends keyof DeepGlossSettings>(key: K, value: DeepGlossSettings[K]) => void;
 }
 
-const inputStyle = {
-  width: '100%',
-  padding: '8px 10px',
-  border: '1px solid #ddd',
-  borderRadius: '6px',
-  fontSize: '14px',
-  boxSizing: 'border-box' as const,
-};
-
-const selectStyle = { ...inputStyle };
-
-const labelStyle = {
-  display: 'block',
-  fontSize: '13px',
-  color: '#555',
-  marginBottom: '4px',
-  fontWeight: 500 as const,
-};
-
 export function ProviderConfig({ settings, onUpdate }: Props) {
+  const [showApiKey, setShowApiKey] = useState(false);
   const openaiConfig = settings.providers['openai-compatible'] || {};
 
   const updateProviderConfig = (key: string, value: string) => {
@@ -41,133 +24,97 @@ export function ProviderConfig({ settings, onUpdate }: Props) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      <div>
-        <label style={labelStyle}>Active Provider</label>
-        <select
-          style={selectStyle}
-          value={settings.activeProvider}
-          onChange={(e) => onUpdate('activeProvider', (e.target as HTMLSelectElement).value)}
+    <div className="dg-stack">
+      <SelectField
+        id="active-provider"
+        label="Active Provider"
+        value={settings.activeProvider}
+        onChange={(e) => onUpdate('activeProvider', (e.target as HTMLSelectElement).value)}
+      >
+        <option value="google">Google Translate (Free)</option>
+        <option value="openai-compatible">OpenAI Compatible (AI)</option>
+      </SelectField>
+
+      <div className="dg-grid-2">
+        <SelectField
+          id="source-language"
+          label="Source Language"
+          value={settings.sourceLang}
+          onChange={(e) => onUpdate('sourceLang', (e.target as HTMLSelectElement).value)}
         >
-          <option value="google">Google Translate (Free)</option>
-          <option value="openai-compatible">OpenAI Compatible (AI)</option>
-        </select>
+          {LANGUAGES.map((lang) => (
+            <option key={lang.code} value={lang.code}>{lang.nativeName} ({lang.name})</option>
+          ))}
+        </SelectField>
+
+        <SelectField
+          id="target-language"
+          label="Target Language (Native)"
+          value={settings.targetLang}
+          onChange={(e) => onUpdate('targetLang', (e.target as HTMLSelectElement).value)}
+        >
+          {LANGUAGES.filter((l) => l.code !== 'auto').map((lang) => (
+            <option key={lang.code} value={lang.code}>{lang.nativeName} ({lang.name})</option>
+          ))}
+        </SelectField>
       </div>
 
-      <div style={{ display: 'flex', gap: '12px' }}>
-        <div style={{ flex: 1 }}>
-          <label style={labelStyle}>Source Language</label>
-          <select
-            style={selectStyle}
-            value={settings.sourceLang}
-            onChange={(e) => onUpdate('sourceLang', (e.target as HTMLSelectElement).value)}
-          >
-            {LANGUAGES.map((lang) => (
-              <option key={lang.code} value={lang.code}>
-                {lang.nativeName} ({lang.name})
-              </option>
-            ))}
-          </select>
-        </div>
-        <div style={{ flex: 1 }}>
-          <label style={labelStyle}>Target Language (Native)</label>
-          <select
-            style={selectStyle}
-            value={settings.targetLang}
-            onChange={(e) => onUpdate('targetLang', (e.target as HTMLSelectElement).value)}
+      <div className="dg-surface dg-surface--accent">
+        <ToggleRow
+          id="auto-target-lang"
+          label="Auto switch target language / 自动切换目标语言"
+          checked={settings.autoTargetLang}
+          onChange={(v) => onUpdate('autoTargetLang', v)}
+          description="When detected language equals your native language, translate to the second language; otherwise translate to native language."
+        />
+
+        {settings.autoTargetLang && (
+          <SelectField
+            id="second-language"
+            label="Second Language / 第二语言"
+            value={settings.secondLang}
+            onChange={(e) => onUpdate('secondLang', (e.target as HTMLSelectElement).value)}
           >
             {LANGUAGES.filter((l) => l.code !== 'auto').map((lang) => (
-              <option key={lang.code} value={lang.code}>
-                {lang.nativeName} ({lang.name})
-              </option>
+              <option key={lang.code} value={lang.code}>{lang.nativeName} ({lang.name})</option>
             ))}
-          </select>
-        </div>
-      </div>
-
-      <div style={{
-        padding: '10px 12px',
-        background: '#f5f7ff',
-        borderRadius: '8px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <input
-            type="checkbox"
-            id="autoTargetLang"
-            checked={settings.autoTargetLang}
-            onChange={(e) => onUpdate('autoTargetLang', (e.target as HTMLInputElement).checked)}
-            style={{ margin: 0 }}
-          />
-          <label for="autoTargetLang" style={{ fontSize: '13px', color: '#333', cursor: 'pointer' }}>
-            Auto switch target language / 自动切换目标语言
-          </label>
-        </div>
-        {settings.autoTargetLang && (
-          <div>
-            <label style={labelStyle}>Second Language / 第二语言</label>
-            <select
-              style={selectStyle}
-              value={settings.secondLang}
-              onChange={(e) => onUpdate('secondLang', (e.target as HTMLSelectElement).value)}
-            >
-              {LANGUAGES.filter((l) => l.code !== 'auto').map((lang) => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.nativeName} ({lang.name})
-                </option>
-              ))}
-            </select>
-            <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#888', lineHeight: '1.5' }}>
-              When detected language = native language, translate to second language; otherwise translate to native language.
-              <br />
-              当检测到的语言为母语时，翻译为第二语言；否则翻译为母语。
-            </p>
-          </div>
+          </SelectField>
         )}
       </div>
 
       {settings.activeProvider === 'openai-compatible' && (
-        <div style={{
-          padding: '12px',
-          background: '#f9f9f9',
-          borderRadius: '8px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px',
-        }}>
-          <h3 style={{ margin: 0, fontSize: '14px' }}>OpenAI Compatible Settings</h3>
-          <div>
-            <label style={labelStyle}>API Endpoint</label>
-            <input
-              type="text"
-              style={inputStyle}
-              value={(openaiConfig.endpoint as string) || 'https://api.openai.com/v1/chat/completions'}
-              placeholder="https://api.openai.com/v1/chat/completions"
-              onChange={(e) => updateProviderConfig('endpoint', (e.target as HTMLInputElement).value)}
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>API Key</label>
-            <input
-              type="password"
-              style={inputStyle}
+        <div className="dg-surface dg-stack">
+          <h3 className="dg-title dg-title--compact">OpenAI Compatible Settings</h3>
+          <TextInputField
+            id="openai-endpoint"
+            label="API Endpoint"
+            type="url"
+            value={(openaiConfig.endpoint as string) || 'https://api.openai.com/v1/chat/completions'}
+            placeholder="https://api.openai.com/v1/chat/completions"
+            onChange={(e) => updateProviderConfig('endpoint', (e.target as HTMLInputElement).value)}
+          />
+          <div className="dg-stack dg-stack--tight">
+            <TextInputField
+              id="openai-api-key"
+              label="API Key"
+              type={showApiKey ? 'text' : 'password'}
               value={(openaiConfig.apiKey as string) || ''}
               placeholder="sk-..."
+              autoComplete="off"
               onChange={(e) => updateProviderConfig('apiKey', (e.target as HTMLInputElement).value)}
             />
+            <Button size="compact" onClick={() => setShowApiKey((v) => !v)}>
+              {showApiKey ? 'Hide API Key' : 'Show API Key'}
+            </Button>
           </div>
-          <div>
-            <label style={labelStyle}>Model</label>
-            <input
-              type="text"
-              style={inputStyle}
-              value={(openaiConfig.model as string) || 'gpt-4o-mini'}
-              placeholder="gpt-4o-mini"
-              onChange={(e) => updateProviderConfig('model', (e.target as HTMLInputElement).value)}
-            />
-          </div>
+          <TextInputField
+            id="openai-model"
+            label="Model"
+            type="text"
+            value={(openaiConfig.model as string) || 'gpt-4o-mini'}
+            placeholder="gpt-4o-mini"
+            onChange={(e) => updateProviderConfig('model', (e.target as HTMLInputElement).value)}
+          />
         </div>
       )}
     </div>
