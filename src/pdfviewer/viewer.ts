@@ -1,5 +1,11 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import {
+  calculateFloatingCardPosition,
+  createTranslateTriggerButton,
+  setButtonSuccess,
+  setElementVisible,
+} from '@/shared/translation-card';
+import {
   EventBus,
   PDFLinkService,
   PDFViewer,
@@ -204,27 +210,16 @@ eventBus.on('scalechanging', () => {
 // Sandbox pages can't use chrome.* APIs, so we communicate via postMessage
 // with a bridge script in the parent/extension context.
 
-const TRANSLATE_ICON_SVG = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/></svg>`;
-
 // Translation UI elements (directly in page, not shadow DOM — we're in sandbox)
-let triggerEl: HTMLDivElement | null = null;
+let triggerEl: HTMLButtonElement | null = null;
 let cardEl: HTMLDivElement | null = null;
 let currentSelectionText = '';
 
 function createTranslationUI(): void {
   // Trigger icon
-  triggerEl = document.createElement('div');
-  triggerEl.className = 'dg-trigger';
-  triggerEl.innerHTML = TRANSLATE_ICON_SVG;
-  triggerEl.addEventListener('click', (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    triggerEl!.classList.remove('visible');
+  triggerEl = createTranslateTriggerButton(() => {
+    setElementVisible(triggerEl!, false);
     requestTranslation(currentSelectionText);
-  });
-  triggerEl.addEventListener('mousedown', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
   });
   document.body.appendChild(triggerEl);
 
@@ -240,7 +235,7 @@ function createTranslationUI(): void {
     debounceTimer = window.setTimeout(() => {
       const sel = document.getSelection();
       if (!sel || sel.isCollapsed || !sel.toString().trim()) {
-        triggerEl!.classList.remove('visible');
+        setElementVisible(triggerEl!, false);
         return;
       }
       currentSelectionText = sel.toString().trim();
@@ -254,14 +249,14 @@ function createTranslationUI(): void {
       if (top < 4) top = rect.bottom + 8;
       triggerEl!.style.left = `${left}px`;
       triggerEl!.style.top = `${top}px`;
-      triggerEl!.classList.add('visible');
+      setElementVisible(triggerEl!, true);
     }, 50);
   });
 
   document.addEventListener('mousedown', (e) => {
     if (triggerEl?.contains(e.target as Node)) return;
     if (cardEl?.contains(e.target as Node)) return;
-    triggerEl?.classList.remove('visible');
+    if (triggerEl) setElementVisible(triggerEl, false);
     hideCard();
   });
 }
@@ -284,47 +279,50 @@ function showCard(sourceText: string, rect: DOMRect | null): void {
   if (!cardEl) return;
 
   const maxWidth = 400;
-  let left = rect ? rect.left : 100;
-  let top = rect ? rect.bottom + 8 : 100;
-  left = Math.max(8, Math.min(left, window.innerWidth - maxWidth - 8));
-  if (top + 200 > window.innerHeight) {
-    top = Math.max(8, (rect?.top ?? 100) - 200);
-  }
+  const fallbackRect = rect ?? new DOMRect(100, 100, 0, 0);
+  const position = calculateFloatingCardPosition(fallbackRect, maxWidth, 'below');
 
-  cardEl.style.left = `${left}px`;
-  cardEl.style.top = `${top}px`;
-  cardEl.style.width = `${maxWidth}px`;
+  cardEl.style.left = `${position.left}px`;
+  cardEl.style.top = `${position.top}px`;
+  cardEl.style.width = `${position.width}px`;
   cardEl.style.display = 'block';
 
   cardEl.innerHTML = `
-    <div class="dg-card">
+    <div class="dg-card" data-theme="auto" role="dialog" aria-label="DeepGloss PDF translation result">
       <div class="dg-header">
         <span class="dg-header-title">DeepGloss</span>
-        <button class="dg-close" id="dg-close-btn">&times;</button>
+        <button class="dg-close" id="dg-close-btn" type="button" aria-label="Close translation card">&times;</button>
       </div>
       <div class="dg-source">${escapeHtml(sourceText.length > 200 ? sourceText.slice(0, 200) + '...' : sourceText)}</div>
       <div class="dg-body">
-        <div class="dg-loading" style="display:flex"><div class="dg-spinner"></div></div>
-        <div class="dg-stream" id="dg-stream"></div>
-        <div class="dg-error" id="dg-error"></div>
+        <div class="dg-loading is-visible" role="status" aria-live="polite"><div class="dg-spinner"></div><span>正在翻译...</span></div>
+        <div class="dg-stream" id="dg-stream" role="status" aria-live="polite" aria-atomic="false"></div>
+        <div class="dg-error" id="dg-error" role="alert"></div>
       </div>
       <div class="dg-footer">
-        <span id="dg-provider"></span>
-        <button class="dg-copy-btn" id="dg-copy-btn">Copy</button>
+        <span class="dg-provider-label" id="dg-provider"></span>
+        <div class="dg-footer-actions">
+          <button class="dg-copy-btn" id="dg-copy-btn" type="button" aria-label="Copy translation result">Copy</button>
+        </div>
       </div>
     </div>
   `;
 
+  const card = cardEl.querySelector('.dg-card') as HTMLDivElement | null;
+  if (card) card.style.maxHeight = `${position.maxHeight}px`;
+
   document.getElementById('dg-close-btn')!.addEventListener('click', hideCard);
-  document.getElementById('dg-copy-btn')!.addEventListener('click', () => {
+  document.getElementById('dg-copy-btn')!.addEventListener('click', async () => {
+    const button = document.getElementById('dg-copy-btn') as HTMLButtonElement;
     const text = document.getElementById('dg-stream')?.textContent || '';
-    if (text) {
-      navigator.clipboard.writeText(text);
-      document.getElementById('dg-copy-btn')!.textContent = 'Copied!';
-      setTimeout(() => {
-        const btn = document.getElementById('dg-copy-btn');
-        if (btn) btn.textContent = 'Copy';
-      }, 1500);
+    if (!text) return;
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setButtonSuccess(button, 'Copied!', 'Copy');
+    } catch {
+      button.textContent = 'Copy failed';
+      setTimeout(() => { button.textContent = 'Copy'; }, 1500);
     }
   });
 }
@@ -335,23 +333,25 @@ function hideCard(): void {
 
 function handleTranslationResponse(data: { chunk?: string; done?: boolean; error?: string }): void {
   if (!cardEl) return;
-  const loading = cardEl.querySelector('.dg-loading') as HTMLElement;
-  const stream = document.getElementById('dg-stream');
-  const error = document.getElementById('dg-error');
+  const loading = cardEl.querySelector('.dg-loading') as HTMLElement | null;
+  const stream = document.getElementById('dg-stream') as HTMLElement | null;
+  const error = document.getElementById('dg-error') as HTMLElement | null;
 
   if (data.error) {
-    if (loading) loading.style.display = 'none';
+    if (loading) setElementVisible(loading, false);
+    if (stream) setElementVisible(stream, false);
     if (error) {
-      error.style.display = 'block';
+      setElementVisible(error, true);
       error.textContent = data.error;
     }
     return;
   }
 
   if (data.chunk) {
-    if (loading) loading.style.display = 'none';
+    if (loading) setElementVisible(loading, false);
+    if (error) setElementVisible(error, false);
     if (stream) {
-      stream.style.display = 'block';
+      setElementVisible(stream, true);
       stream.textContent += data.chunk;
     }
   }
