@@ -1,6 +1,8 @@
+import translationCardStyles from '@/shared/translation-card.css?inline';
 import cardStyles from './card.css?inline';
 import { calculateCardPosition } from './card-position';
 import { renderDeepReadResult, renderTranslationResult } from './card-renderer';
+import { setButtonSuccess, setElementVisible } from '@/shared/translation-card';
 import type { DeepReadResult, TranslationSegment } from '@/providers/types';
 
 /**
@@ -39,12 +41,14 @@ export class CardHost {
 
     // Inject styles
     const style = document.createElement('style');
-    style.textContent = cardStyles;
+    style.textContent = `${translationCardStyles}\n${cardStyles}`;
     this.shadow.appendChild(style);
 
     // Card container
     this.container = this.el('div', 'dg-card');
     this.container.style.width = `${cardWidth}px`;
+    this.container.setAttribute('role', 'dialog');
+    this.container.setAttribute('aria-label', 'DeepGloss translation result');
     this.container.dataset.theme = cardTheme;
 
     // Header
@@ -53,6 +57,8 @@ export class CardHost {
     title.textContent = 'DeepGloss';
     const closeBtn = document.createElement('button');
     closeBtn.className = 'dg-close';
+    closeBtn.type = 'button';
+    closeBtn.setAttribute('aria-label', 'Close translation card');
     closeBtn.textContent = '\u00d7';
     closeBtn.addEventListener('click', () => this.hide());
     header.append(title, closeBtn);
@@ -63,23 +69,33 @@ export class CardHost {
     // Body
     const body = this.el('div', 'dg-body');
     this.loadingEl = this.el('div', 'dg-loading');
-    this.loadingEl.innerHTML = '<div class="dg-spinner"></div>';
+    this.loadingEl.innerHTML = '<div class="dg-spinner"></div><span>正在翻译...</span>';
+    this.loadingEl.setAttribute('role', 'status');
+    this.loadingEl.setAttribute('aria-live', 'polite');
     this.resultEl = this.el('div', 'dg-result');
     this.streamEl = this.el('div', 'dg-stream');
+    this.streamEl.setAttribute('role', 'status');
+    this.streamEl.setAttribute('aria-live', 'polite');
+    this.streamEl.setAttribute('aria-atomic', 'false');
     this.deepReadEl = this.el('div', 'dg-deep-read');
     this.errorEl = this.el('div', 'dg-error');
+    this.errorEl.setAttribute('role', 'alert');
     body.append(this.loadingEl, this.resultEl, this.streamEl, this.deepReadEl, this.errorEl);
 
     // Footer
     const footer = this.el('div', 'dg-footer');
-    this.providerLabel = this.el('span', '') as HTMLSpanElement;
+    this.providerLabel = this.el('span', 'dg-provider-label') as HTMLSpanElement;
     this.deepReadBtn = document.createElement('button');
-    this.deepReadBtn.className = 'dg-copy-btn';
+    this.deepReadBtn.className = 'dg-action-btn';
+    this.deepReadBtn.type = 'button';
+    this.deepReadBtn.setAttribute('aria-label', '展开深读词卡');
     this.deepReadBtn.textContent = '深读';
-    this.deepReadBtn.style.display = 'none';
+    setElementVisible(this.deepReadBtn, false);
     this.deepReadBtn.addEventListener('click', () => this.onDeepReadRequest?.());
     this.copyBtn = document.createElement('button');
     this.copyBtn.className = 'dg-copy-btn';
+    this.copyBtn.type = 'button';
+    this.copyBtn.setAttribute('aria-label', 'Copy translation result');
     this.copyBtn.textContent = 'Copy';
     this.copyBtn.addEventListener('click', () => this.copyResult());
     const footerActions = this.el('div', 'dg-footer-actions');
@@ -110,6 +126,7 @@ export class CardHost {
     const pos = calculateCardPosition(rect, this.cardWidth, position);
     this.host.style.left = `${pos.left}px`;
     this.host.style.top = `${pos.top}px`;
+    this.container.style.width = `${pos.width}px`;
     this.container.style.maxHeight = `${pos.maxHeight}px`;
     this.host.style.display = 'block';
   }
@@ -124,19 +141,19 @@ export class CardHost {
   }
 
   setLoading(loading: boolean): void {
-    this.loadingEl.style.display = loading ? 'flex' : 'none';
+    setElementVisible(this.loadingEl, loading);
   }
 
   setDeepReadAvailable(available: boolean, onRequest: (() => void) | null): void {
     this.onDeepReadRequest = available ? onRequest : null;
-    this.deepReadBtn.style.display = available ? 'inline-flex' : 'none';
+    setElementVisible(this.deepReadBtn, available);
     this.deepReadBtn.disabled = false;
     this.deepReadBtn.textContent = '深读';
   }
 
   appendStreamChunk(chunk: string): void {
-    this.loadingEl.style.display = 'none';
-    this.streamEl.style.display = 'block';
+    setElementVisible(this.loadingEl, false);
+    setElementVisible(this.streamEl, true);
     this.streamEl.textContent += chunk;
   }
 
@@ -146,17 +163,17 @@ export class CardHost {
   }
 
   renderResult(segment: TranslationSegment): void {
-    this.loadingEl.style.display = 'none';
-    this.streamEl.style.display = 'none';
-    this.resultEl.style.display = 'block';
+    setElementVisible(this.loadingEl, false);
+    setElementVisible(this.streamEl, false);
+    setElementVisible(this.resultEl, true);
     renderTranslationResult(this.resultEl, segment);
   }
 
   setDeepReadLoading(): void {
     this.deepReadBtn.disabled = true;
     this.deepReadBtn.textContent = '加载中';
-    this.deepReadEl.style.display = 'block';
-    this.deepReadEl.innerHTML = '<div class="dg-deep-loading">正在生成深读词卡...</div>';
+    setElementVisible(this.deepReadEl, true);
+    this.deepReadEl.innerHTML = '<div class="dg-deep-loading" role="status">正在生成深读词卡...</div>';
   }
 
   renderDeepRead(
@@ -167,14 +184,14 @@ export class CardHost {
   ): void {
     this.deepReadBtn.disabled = false;
     this.deepReadBtn.textContent = '深读';
-    this.deepReadEl.style.display = 'block';
+    setElementVisible(this.deepReadEl, true);
     renderDeepReadResult(this.deepReadEl, result, { saved, onSpeak, onSave });
   }
 
   showDeepReadError(message: string): void {
     this.deepReadBtn.disabled = false;
     this.deepReadBtn.textContent = '深读';
-    this.deepReadEl.style.display = 'block';
+    setElementVisible(this.deepReadEl, true);
     this.deepReadEl.innerHTML = '';
     const error = this.el('div', 'dg-deep-error');
     error.textContent = message;
@@ -186,9 +203,9 @@ export class CardHost {
   }
 
   showError(message: string): void {
-    this.loadingEl.style.display = 'none';
-    this.streamEl.style.display = 'none';
-    this.errorEl.style.display = 'block';
+    setElementVisible(this.loadingEl, false);
+    setElementVisible(this.streamEl, false);
+    setElementVisible(this.errorEl, true);
     this.errorEl.textContent = message;
   }
 
@@ -203,23 +220,27 @@ export class CardHost {
   }
 
   private resetStates(): void {
-    this.loadingEl.style.display = 'none';
-    this.resultEl.style.display = 'none';
+    setElementVisible(this.loadingEl, false);
+    setElementVisible(this.resultEl, false);
     this.resultEl.innerHTML = '';
-    this.streamEl.style.display = 'none';
+    setElementVisible(this.streamEl, false);
     this.streamEl.textContent = '';
-    this.deepReadEl.style.display = 'none';
+    setElementVisible(this.deepReadEl, false);
     this.deepReadEl.innerHTML = '';
-    this.errorEl.style.display = 'none';
+    setElementVisible(this.errorEl, false);
     this.errorEl.textContent = '';
     this.setDeepReadAvailable(false, null);
   }
 
-  private copyResult(): void {
+  private async copyResult(): Promise<void> {
     const text = this.streamEl.textContent || this.resultEl.textContent || '';
-    if (text) {
-      navigator.clipboard.writeText(text);
-      this.copyBtn.textContent = 'Copied!';
+    if (!text) return;
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setButtonSuccess(this.copyBtn, 'Copied!', 'Copy');
+    } catch {
+      this.copyBtn.textContent = 'Copy failed';
       setTimeout(() => { this.copyBtn.textContent = 'Copy'; }, 1500);
     }
   }
