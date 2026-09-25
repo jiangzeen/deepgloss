@@ -1,5 +1,6 @@
 export const EXTENSION_NAME = 'DeepGloss';
 export const STREAM_PORT_NAME = 'translate-stream';
+export const DEEP_READ_PORT_NAME = 'deep-read-stream';
 export const DEFAULT_TARGET_LANG = 'zh-CN';
 export const DEFAULT_SOURCE_LANG = 'auto';
 export const SELECTION_DEBOUNCE_MS = 50;

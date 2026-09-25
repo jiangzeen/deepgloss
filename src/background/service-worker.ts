@@ -5,7 +5,16 @@ import { TranslationHistory } from '@/storage/history';
 import { WordbookStorage } from '@/storage/wordbook';
 import { ProviderRegistry } from '@/providers/provider-registry';
 import { registerMessageHandler } from '@/messaging/handler';
-import { STREAM_PORT_NAME } from '@/shared/constants';
+import { STREAM_PORT_NAME, DEEP_READ_PORT_NAME } from '@/shared/constants';
+import { DeepReadCacheStorage } from '@/storage/deep-read-cache';
+import { resolveSections } from '@/providers/deep-read';
+import type {
+  DeepReadMeta,
+  DeepReadRequest,
+  DeepReadResult,
+  DeepReadSection,
+  DeepReadSectionKind,
+} from '@/providers/types';
 import type { ContentToBackgroundMessage, BackgroundToContentMessage } from '@/messaging/types';
 
 /**
@@ -64,12 +73,141 @@ async function resolveTargetLang(
 const cache = new TranslationCache();
 const history = new TranslationHistory();
 const wordbook = new WordbookStorage();
+const deepReadCache = new DeepReadCacheStorage();
 const registry = new ProviderRegistry();
 
 // Initialize providers with saved config
 loadSettings().then((settings) => {
   registry.configureAll(settings.providers);
 });
+
+// ---- AI deep read orchestration ----
+
+interface DeepReadPayload {
+  text: string;
+  sourceLang: string;
+  targetLang: string;
+  context?: string;
+  translatedText?: string;
+  providerId?: string;
+  sections?: DeepReadSectionKind[];
+  /** Bypass the deep-read cache. */
+  force?: boolean;
+}
+
+interface DeepReadEmit {
+  onMeta?: (meta: DeepReadMeta) => void;
+  onSection?: (section: DeepReadSection, index: number) => void;
+  /** Called once a cancellable request starts. */
+  onAbort?: (abort: AbortController) => void;
+}
+
+function metaFromResult(result: DeepReadResult): DeepReadMeta {
+  return {
+    term: result.term,
+    normalizedTerm: result.normalizedTerm,
+    phonetic: result.phonetic,
+    pronunciationLang: result.pronunciationLang,
+    partOfSpeech: result.partOfSpeech,
+    frequency: result.frequency,
+    primaryTranslation: result.primaryTranslation,
+    alternatives: result.alternatives,
+    definitions: result.definitions,
+  };
+}
+
+/**
+ * Run a deep read with cache + provider resolution. Emits meta/sections as they
+ * become available (cache replay or model streaming).
+ */
+async function performDeepRead(
+  payload: DeepReadPayload,
+  settings: DeepGlossSettings,
+  emit?: DeepReadEmit,
+): Promise<DeepReadResult> {
+  const providerId = payload.providerId || settings.activeProvider;
+  const provider = registry.get(providerId);
+
+  if (!provider.deepRead && !provider.deepReadStream) {
+    throw new Error(
+      '当前翻译服务不支持 AI 深读，请在设置中切换到 OpenAI-compatible provider。',
+    );
+  }
+
+  const targetLang = await resolveTargetLang(payload.text, payload.targetLang, settings);
+  const sections = resolveSections(
+    payload.sections && payload.sections.length > 0
+      ? payload.sections
+      : settings.deepReadSections,
+  );
+  const model = settings.providers[providerId]?.model as string | undefined;
+  const sectionsKey = sections.join(',');
+
+  if (settings.deepReadCacheEnabled && !payload.force) {
+    deepReadCache.setMaxSize(settings.deepReadCacheMaxSize);
+    const cached = await deepReadCache.get(
+      payload.text,
+      payload.sourceLang,
+      targetLang,
+      providerId,
+      model,
+      sectionsKey,
+    );
+    if (cached) {
+      emit?.onMeta?.(metaFromResult(cached));
+      cached.sections.forEach((section, index) => emit?.onSection?.(section, index));
+      return cached;
+    }
+  }
+
+  const req: DeepReadRequest = {
+    text: payload.text,
+    sourceLang: payload.sourceLang,
+    targetLang,
+    context: payload.context,
+    translatedText: payload.translatedText,
+    sections,
+  };
+
+  let result: DeepReadResult;
+  if (provider.deepReadStream) {
+    const { abort, done } = provider.deepReadStream(req, {
+      onMeta: emit?.onMeta,
+      onSection: emit?.onSection,
+    });
+    emit?.onAbort?.(abort);
+    result = await done;
+  } else {
+    result = await provider.deepRead!(req);
+    emit?.onMeta?.(metaFromResult(result));
+    result.sections.forEach((section, index) => emit?.onSection?.(section, index));
+  }
+
+  result = { ...result, providerId, model, generatedAt: Date.now() };
+
+  if (settings.deepReadCacheEnabled) {
+    deepReadCache.setMaxSize(settings.deepReadCacheMaxSize);
+    await deepReadCache.set(
+      payload.text,
+      payload.sourceLang,
+      targetLang,
+      providerId,
+      model,
+      sectionsKey,
+      result,
+    );
+  }
+
+  return result;
+}
+
+function safePost(port: chrome.runtime.Port, message: BackgroundToContentMessage): void {
+  try {
+    port.postMessage(message);
+  } catch {
+    // port already disconnected
+  }
+}
 
 // ---- One-shot message handler ----
 registerMessageHandler(async (msg: ContentToBackgroundMessage): Promise<BackgroundToContentMessage> => {
@@ -90,16 +228,12 @@ registerMessageHandler(async (msg: ContentToBackgroundMessage): Promise<Backgrou
 
     case 'DEEP_READ': {
       const settings = await loadSettings();
-      const providerId = msg.payload.providerId || settings.activeProvider;
-      const provider = registry.get(providerId);
-      if (!provider.deepRead) {
-        throw new Error('当前翻译服务暂不支持深读，请切换到 OpenAI-compatible provider。');
-      }
-      const finalTargetLang = await resolveTargetLang(msg.payload.text, msg.payload.targetLang, settings);
-      const result = await provider.deepRead({
-        ...msg.payload,
-        targetLang: finalTargetLang,
-      });
+      const result = await performDeepRead(msg.payload, settings);
+      const finalTargetLang = await resolveTargetLang(
+        msg.payload.text,
+        msg.payload.targetLang,
+        settings,
+      );
       const saved = await wordbook.get(
         result.normalizedTerm || result.term,
         msg.payload.sourceLang,
@@ -243,6 +377,62 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 
   port.onDisconnect.addListener(() => {
+    abortController?.abort();
+  });
+});
+
+// ---- Deep read streaming via long-lived ports ----
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== DEEP_READ_PORT_NAME) return;
+
+  let abortController: AbortController | null = null;
+  let cancelled = false;
+
+  port.onMessage.addListener(async (msg: ContentToBackgroundMessage) => {
+    if (msg.type === 'DEEP_READ_STREAM_CANCEL') {
+      cancelled = true;
+      abortController?.abort();
+      return;
+    }
+    if (msg.type !== 'DEEP_READ_STREAM_START') return;
+
+    const settings = await loadSettings();
+    try {
+      const result = await performDeepRead(msg.payload, settings, {
+        onMeta: (meta) => safePost(port, { type: 'DEEP_READ_META', payload: meta }),
+        onSection: (section, index) =>
+          safePost(port, { type: 'DEEP_READ_SECTION', payload: { section, index } }),
+        onAbort: (abort) => {
+          abortController = abort;
+          if (cancelled) abort.abort();
+        },
+      });
+
+      const finalTargetLang = await resolveTargetLang(
+        msg.payload.text,
+        msg.payload.targetLang,
+        settings,
+      );
+      const saved = await wordbook.get(
+        result.normalizedTerm || result.term,
+        msg.payload.sourceLang,
+        finalTargetLang,
+      );
+      safePost(port, {
+        type: 'DEEP_READ_STREAM_END',
+        payload: { result, saved: Boolean(saved) },
+      });
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
+      safePost(port, {
+        type: 'TRANSLATE_ERROR',
+        payload: { message: (err as Error).message, code: 'DEEP_READ_ERROR' },
+      });
+    }
+  });
+
+  port.onDisconnect.addListener(() => {
+    cancelled = true;
     abortController?.abort();
   });
 });

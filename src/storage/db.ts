@@ -2,7 +2,7 @@ import { openDB, type IDBPDatabase } from 'idb';
 import type { DeepGlossSchema } from './idb-schema';
 
 const DB_NAME = 'deepgloss';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBPDatabase<DeepGlossSchema>> | null = null;
 
@@ -10,6 +10,13 @@ export function openDeepGlossDB(): Promise<IDBPDatabase<DeepGlossSchema>> {
   if (!dbPromise) {
     dbPromise = openDB<DeepGlossSchema>(DB_NAME, DB_VERSION, {
       upgrade(db) {
+        if (!db.objectStoreNames.contains('deepReadCache')) {
+          const deepReadStore = db.createObjectStore('deepReadCache', {
+            keyPath: 'key',
+          });
+          deepReadStore.createIndex('accessedAt', 'accessedAt');
+        }
+
         if (!db.objectStoreNames.contains('cache')) {
           const cacheStore = db.createObjectStore('cache', { keyPath: 'key' });
           cacheStore.createIndex('accessedAt', 'accessedAt');
