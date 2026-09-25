@@ -4,3 +4,6 @@ dist/
 .DS_Store
 .voicetree
 .claude
+
+# Local Figma design extraction (not versioned)
+design/
