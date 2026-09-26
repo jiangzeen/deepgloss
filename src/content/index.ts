@@ -287,6 +287,7 @@ class DeepGlossContentScript {
       info.text,
       this.settings.activeProvider,
     );
+    this.cardHost.setRetryHandler(() => this.startTranslation(info));
     this.cardHost.setDeepReadAvailable(
       this.settings.deepReadEnabled && isDeepReadCandidate(info.text),
       () => this.requestDeepRead(info, targetLang),

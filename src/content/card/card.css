@@ -657,3 +657,90 @@
     color: #fcd34d;
   }
 }
+
+/* ===================== UX polish ===================== */
+
+/* Wrapper makes the body the scroll region while allowing a bottom fade. */
+.dg-body-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Bottom fade hints there is more content to scroll. */
+.dg-scroll-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 28px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), #fff);
+}
+
+/* Header doubles as a drag handle. */
+.dg-header {
+  cursor: grab;
+}
+
+.dg-header--dragging {
+  cursor: grabbing;
+}
+
+/* Error state + retry */
+.dg-error-msg {
+  line-height: 1.5;
+}
+
+.dg-retry-btn {
+  margin-top: 8px;
+}
+
+/* Skeleton loader for deep read */
+.dg-deep-loading--skeleton::before {
+  display: none;
+}
+
+.dg-skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  background: linear-gradient(90deg, #eef0f4 25%, #e3e6ec 37%, #eef0f4 63%);
+  background-size: 400% 100%;
+  animation: dg-shimmer 1.3s ease infinite;
+}
+
+.dg-skeleton-line:first-child {
+  height: 18px;
+  margin-bottom: 14px;
+}
+
+@keyframes dg-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+/* Dark theme */
+.dg-card[data-theme="dark"] .dg-scroll-fade {
+  background: linear-gradient(to bottom, rgba(45, 45, 45, 0), #2d2d2d);
+}
+
+.dg-card[data-theme="dark"] .dg-skeleton-line {
+  background: linear-gradient(90deg, #3a3a3a 25%, #474747 37%, #3a3a3a 63%);
+  background-size: 400% 100%;
+}
+
+@media (prefers-color-scheme: dark) {
+  .dg-card[data-theme="auto"] .dg-scroll-fade {
+    background: linear-gradient(to bottom, rgba(45, 45, 45, 0), #2d2d2d);
+  }
+
+  .dg-card[data-theme="auto"] .dg-skeleton-line {
+    background: linear-gradient(90deg, #3a3a3a 25%, #474747 37%, #3a3a3a 63%);
+    background-size: 400% 100%;
+  }
+}
