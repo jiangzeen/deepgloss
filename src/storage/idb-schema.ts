@@ -2,6 +2,18 @@ import type { DBSchema } from 'idb';
 import type { DeepReadResult, TranslationSegment } from '@/providers/types';
 
 export interface DeepGlossSchema extends DBSchema {
+  deepReadCache: {
+    key: string;
+    value: {
+      key: string;
+      result: DeepReadResult;
+      accessedAt: number;
+      createdAt: number;
+    };
+    indexes: {
+      accessedAt: number;
+    };
+  };
   cache: {
     key: string;
     value: {

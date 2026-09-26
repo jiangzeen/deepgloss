@@ -1,15 +1,15 @@
 import { SelectionDetector, type SelectionInfo } from './selection-detector';
 import { TriggerIcon } from './trigger-icon';
 import { CardHost } from './card/card-host';
-import { sendMessage, openStreamPort } from '@/messaging/sender';
-import type { DeepGlossSettings } from '@/storage/settings';
+import { sendMessage, openStreamPort, openDeepReadPort } from '@/messaging/sender';
+import { type DeepGlossSettings, DEFAULT_SETTINGS } from '@/storage/settings';
 import type {
   BackgroundToContentMessage,
   TabMessage,
   TranslateStreamChunkResponse,
   TranslateErrorResponse,
 } from '@/messaging/types';
-import type { DeepReadResult } from '@/providers/types';
+import type { DeepReadMeta, DeepReadResult } from '@/providers/types';
 
 /**
  * Detect if text is predominantly in the given language using Unicode ranges.
@@ -77,6 +77,7 @@ class DeepGlossContentScript {
   private triggerIcon: TriggerIcon;
   private cardHost: CardHost | null = null;
   private currentPort: chrome.runtime.Port | null = null;
+  private currentDeepReadPort: chrome.runtime.Port | null = null;
 
   constructor() {
     this.selectionDetector = new SelectionDetector();
@@ -93,21 +94,9 @@ class DeepGlossContentScript {
     } catch {
       // Use defaults if settings can't be loaded
       this.settings = {
-        activeProvider: 'google',
+        ...DEFAULT_SETTINGS,
         providers: {},
-        sourceLang: 'auto',
-        targetLang: 'zh-CN',
-        secondLang: 'en',
-        autoTargetLang: true,
-        triggerMode: 'icon',
-        shortcutKey: 'Alt+T',
-        cardPosition: 'below',
-        cardTheme: 'auto',
-        cardMaxWidth: 400,
-        cacheEnabled: true,
-        cacheMaxSize: 1000,
-        historyEnabled: true,
-        pdfViewerEnabled: true,
+        deepReadSections: [...DEFAULT_SETTINGS.deepReadSections],
       };
     }
 
@@ -171,45 +160,78 @@ class DeepGlossContentScript {
     return this.settings.targetLang;
   }
 
-  private async requestDeepRead(info: SelectionInfo, targetLang: string): Promise<void> {
+  private requestDeepRead(info: SelectionInfo, targetLang: string): void {
     if (!this.settings || !this.cardHost) return;
 
-    this.cardHost.setDeepReadLoading();
+    this.cardHost.beginDeepRead();
 
-    try {
-      const resp = await sendMessage({
-        type: 'DEEP_READ',
-        payload: {
-          text: info.text,
-          sourceLang: this.settings.sourceLang,
-          targetLang,
-          context: info.context || undefined,
-          translatedText: this.cardHost.getCurrentResultText() || undefined,
-          providerId: this.settings.activeProvider,
-        },
-      });
+    this.currentDeepReadPort?.disconnect();
+    const port = openDeepReadPort({
+      type: 'DEEP_READ_STREAM_START',
+      payload: {
+        text: info.text,
+        sourceLang: this.settings.sourceLang,
+        targetLang,
+        context: info.context || undefined,
+        translatedText: this.cardHost.getCurrentResultText() || undefined,
+        providerId: this.settings.activeProvider,
+        sections: this.settings.deepReadSections,
+      },
+    });
+    this.currentDeepReadPort = port;
 
-      if (resp.type === 'DEEP_READ_RESULT') {
-        this.cardHost.renderDeepRead(
-          resp.payload.result,
-          resp.payload.saved,
-          () => this.speak(resp.payload.result),
-          (button) => this.saveWord(resp.payload.result, targetLang, button),
-        );
-      } else if (resp.type === 'TRANSLATE_ERROR') {
-        this.cardHost.showDeepReadError(resp.payload.message);
+    port.onMessage.addListener((msg: BackgroundToContentMessage) => {
+      switch (msg.type) {
+        case 'DEEP_READ_META': {
+          const meta = msg.payload;
+          this.cardHost?.setDeepReadMeta(meta, () => this.speakTerm(meta));
+          break;
+        }
+        case 'DEEP_READ_SECTION': {
+          const { section, index } = msg.payload;
+          this.cardHost?.appendDeepReadSection(section, index);
+          break;
+        }
+        case 'DEEP_READ_STREAM_END': {
+          const { result, saved } = msg.payload;
+          this.cardHost?.completeDeepRead(
+            result,
+            saved,
+            (button) => this.saveWord(result, targetLang, button),
+            () => this.speakResult(result),
+          );
+          this.currentDeepReadPort = null;
+          break;
+        }
+        case 'TRANSLATE_ERROR': {
+          this.cardHost?.showDeepReadError(msg.payload.message);
+          this.currentDeepReadPort = null;
+          break;
+        }
       }
-    } catch (err) {
-      this.cardHost.showDeepReadError((err as Error).message);
-    }
+    });
+
+    port.onDisconnect.addListener(() => {
+      if (this.currentDeepReadPort === port) this.currentDeepReadPort = null;
+    });
   }
 
-  private speak(result: DeepReadResult): void {
+  private speakTerm(meta: DeepReadMeta): void {
     if (!('speechSynthesis' in window)) return;
-    const utterance = new SpeechSynthesisUtterance(result.normalizedTerm || result.term);
-    if (result.pronunciationLang) utterance.lang = result.pronunciationLang;
+    const text = meta.normalizedTerm || meta.term;
+    if (!text) return;
+    const utterance = new SpeechSynthesisUtterance(text);
+    if (meta.pronunciationLang) utterance.lang = meta.pronunciationLang;
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
+  }
+
+  private speakResult(result: DeepReadResult): void {
+    this.speakTerm({
+      normalizedTerm: result.normalizedTerm,
+      term: result.term,
+      pronunciationLang: result.pronunciationLang,
+    });
   }
 
   private async saveWord(
@@ -251,9 +273,11 @@ class DeepGlossContentScript {
 
     this.triggerIcon.hide();
 
-    // Disconnect previous stream if any
+    // Disconnect previous streams if any
     this.currentPort?.disconnect();
     this.currentPort = null;
+    this.currentDeepReadPort?.disconnect();
+    this.currentDeepReadPort = null;
 
     const targetLang = this.resolveTargetLang(info.text);
 
@@ -264,7 +288,7 @@ class DeepGlossContentScript {
       this.settings.activeProvider,
     );
     this.cardHost.setDeepReadAvailable(
-      isDeepReadCandidate(info.text),
+      this.settings.deepReadEnabled && isDeepReadCandidate(info.text),
       () => this.requestDeepRead(info, targetLang),
     );
     this.cardHost.setLoading(true);

@@ -1,4 +1,5 @@
-import type { ProviderConfig } from '@/providers/types';
+import type { DeepReadSectionKind, ProviderConfig } from '@/providers/types';
+import { DEEP_READ_SECTION_KINDS } from '@/providers/deep-read/sections';
 
 export interface DeepGlossSettings {
   activeProvider: string;
@@ -16,9 +17,15 @@ export interface DeepGlossSettings {
   cacheMaxSize: number;
   historyEnabled: boolean;
   pdfViewerEnabled: boolean;
+  // ---- AI deep read ----
+  deepReadEnabled: boolean;
+  deepReadCacheEnabled: boolean;
+  deepReadCacheMaxSize: number;
+  /** Section kinds requested from the model. Trim to save tokens/latency. */
+  deepReadSections: DeepReadSectionKind[];
 }
 
-const DEFAULTS: DeepGlossSettings = {
+export const DEFAULT_SETTINGS: DeepGlossSettings = {
   activeProvider: 'google',
   providers: {},
   sourceLang: 'auto',
@@ -34,11 +41,15 @@ const DEFAULTS: DeepGlossSettings = {
   cacheMaxSize: 1000,
   historyEnabled: true,
   pdfViewerEnabled: true,
+  deepReadEnabled: true,
+  deepReadCacheEnabled: true,
+  deepReadCacheMaxSize: 200,
+  deepReadSections: [...DEEP_READ_SECTION_KINDS],
 };
 
 export async function loadSettings(): Promise<DeepGlossSettings> {
   const stored = await chrome.storage.sync.get(null);
-  return { ...DEFAULTS, ...stored } as DeepGlossSettings;
+  return { ...DEFAULT_SETTINGS, ...stored } as DeepGlossSettings;
 }
 
 export async function saveSettings(partial: Partial<DeepGlossSettings>): Promise<void> {

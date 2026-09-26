@@ -1,4 +1,10 @@
-import type { DeepReadResult, TranslationSegment } from '@/providers/types';
+import type {
+  DeepReadMeta,
+  DeepReadResult,
+  DeepReadSection,
+  DeepReadSectionKind,
+  TranslationSegment,
+} from '@/providers/types';
 import type { DeepGlossSettings } from '@/storage/settings';
 import type { WordbookEntry } from '@/storage/wordbook';
 
@@ -49,7 +55,29 @@ export interface DeepReadMessage {
     context?: string;
     translatedText?: string;
     providerId?: string;
+    sections?: DeepReadSectionKind[];
+    force?: boolean;
   };
+}
+
+export interface DeepReadStreamStartMessage {
+  type: 'DEEP_READ_STREAM_START';
+  payload: {
+    text: string;
+    sourceLang: string;
+    targetLang: string;
+    context?: string;
+    translatedText?: string;
+    providerId?: string;
+    sections?: DeepReadSectionKind[];
+    /** Bypass the deep-read cache. */
+    force?: boolean;
+  };
+}
+
+export interface DeepReadStreamCancelMessage {
+  type: 'DEEP_READ_STREAM_CANCEL';
+  payload: { requestId: string };
 }
 
 export interface SaveWordMessage {
@@ -110,6 +138,21 @@ export interface DeepReadResultResponse {
   payload: { result: DeepReadResult; saved: boolean };
 }
 
+export interface DeepReadMetaResponse {
+  type: 'DEEP_READ_META';
+  payload: DeepReadMeta;
+}
+
+export interface DeepReadSectionResponse {
+  type: 'DEEP_READ_SECTION';
+  payload: { section: DeepReadSection; index: number };
+}
+
+export interface DeepReadStreamEndResponse {
+  type: 'DEEP_READ_STREAM_END';
+  payload: { result: DeepReadResult; saved: boolean };
+}
+
 export interface WordSavedResponse {
   type: 'WORD_SAVED';
   payload: WordbookEntry;
@@ -146,6 +189,8 @@ export type ContentToBackgroundMessage =
   | CacheLookupMessage
   | GetSettingsMessage
   | DeepReadMessage
+  | DeepReadStreamStartMessage
+  | DeepReadStreamCancelMessage
   | SaveWordMessage
   | GetWordMessage
   | ListWordsMessage
@@ -158,6 +203,9 @@ export type BackgroundToContentMessage =
   | CacheHitResponse
   | SettingsResponse
   | DeepReadResultResponse
+  | DeepReadMetaResponse
+  | DeepReadSectionResponse
+  | DeepReadStreamEndResponse
   | WordSavedResponse
   | WordLookupResponse
   | WordListResponse

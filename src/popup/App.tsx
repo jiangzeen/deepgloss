@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
-import type { DeepGlossSettings } from '@/storage/settings';
+import { DEFAULT_SETTINGS, type DeepGlossSettings } from '@/storage/settings';
 import { STREAM_PORT_NAME } from '@/shared/constants';
 import { TranslateInput } from './components/TranslateInput';
 import { TranslateResult } from './components/TranslateResult';
@@ -18,24 +18,7 @@ export function App() {
 
   useEffect(() => {
     chrome.storage.sync.get(null).then((stored) => {
-      const defaults: DeepGlossSettings = {
-        activeProvider: 'google',
-        providers: {},
-        sourceLang: 'auto',
-        targetLang: 'zh-CN',
-        secondLang: 'en',
-        autoTargetLang: true,
-        triggerMode: 'icon',
-        shortcutKey: 'Alt+T',
-        cardPosition: 'below',
-        cardTheme: 'auto',
-        cardMaxWidth: 400,
-        cacheEnabled: true,
-        cacheMaxSize: 1000,
-        historyEnabled: true,
-        pdfViewerEnabled: true,
-      };
-      setSettings({ ...defaults, ...stored } as DeepGlossSettings);
+      setSettings({ ...DEFAULT_SETTINGS, ...stored } as DeepGlossSettings);
     });
   }, []);
 

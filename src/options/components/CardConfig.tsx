@@ -1,4 +1,6 @@
 import type { DeepGlossSettings } from '@/storage/settings';
+import type { DeepReadSectionKind } from '@/providers/types';
+import { DEEP_READ_SECTION_KINDS, DEEP_READ_SECTIONS } from '@/providers/deep-read';
 
 interface Props {
   settings: DeepGlossSettings;
@@ -22,7 +24,44 @@ const labelStyle = {
   fontWeight: 500 as const,
 };
 
+function Checkbox({
+  id,
+  checked,
+  label,
+  onChange,
+}: {
+  id: string;
+  checked: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <input
+        type="checkbox"
+        id={id}
+        checked={checked}
+        onChange={(e) => onChange((e.target as HTMLInputElement).checked)}
+        style={{ margin: 0 }}
+      />
+      <label for={id} style={{ fontSize: '13px', color: '#333', cursor: 'pointer' }}>
+        {label}
+      </label>
+    </div>
+  );
+}
+
 export function CardConfig({ settings, onUpdate }: Props) {
+  const toggleSection = (kind: DeepReadSectionKind, checked: boolean) => {
+    const current = new Set(settings.deepReadSections);
+    if (checked) current.add(kind);
+    else current.delete(kind);
+    const next = DEEP_READ_SECTION_KINDS.filter((k) => current.has(k));
+    // Never allow an empty selection — fall back to at least one section.
+    if (next.length === 0) return;
+    onUpdate('deepReadSections', next);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <div>
@@ -61,6 +100,63 @@ export function CardConfig({ settings, onUpdate }: Props) {
           style={{ width: '100%' }}
           onChange={(e) => onUpdate('cardMaxWidth', Number((e.target as HTMLInputElement).value))}
         />
+      </div>
+
+      {/* ---- AI deep read ---- */}
+      <div style={{
+        marginTop: '4px',
+        padding: '12px',
+        background: '#f5f7ff',
+        borderRadius: '8px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+      }}>
+        <div style={{ fontSize: '13px', fontWeight: 600, color: '#333' }}>AI Deep Read / AI 深读</div>
+
+        <Checkbox
+          id="deepReadEnabled"
+          checked={settings.deepReadEnabled}
+          label="Enable AI deep read tab / 启用 AI 深读标签页"
+          onChange={(v) => onUpdate('deepReadEnabled', v)}
+        />
+
+        <Checkbox
+          id="deepReadCacheEnabled"
+          checked={settings.deepReadCacheEnabled}
+          label="Cache deep-read results / 缓存深读结果"
+          onChange={(v) => onUpdate('deepReadCacheEnabled', v)}
+        />
+
+        {settings.deepReadCacheEnabled && (
+          <div>
+            <label style={labelStyle}>Deep Read Cache Size ({settings.deepReadCacheMaxSize})</label>
+            <input
+              type="range"
+              min="50"
+              max="1000"
+              step="50"
+              value={settings.deepReadCacheMaxSize}
+              style={{ width: '100%' }}
+              onChange={(e) => onUpdate('deepReadCacheMaxSize', Number((e.target as HTMLInputElement).value))}
+            />
+          </div>
+        )}
+
+        <div>
+          <label style={labelStyle}>Sections / 深读板块（裁剪可省 token）</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {DEEP_READ_SECTION_KINDS.map((kind) => (
+              <Checkbox
+                key={kind}
+                id={`section-${kind}`}
+                checked={settings.deepReadSections.includes(kind)}
+                label={`${DEEP_READ_SECTIONS[kind].icon} ${DEEP_READ_SECTIONS[kind].label}`}
+                onChange={(v) => toggleSection(kind, v)}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
