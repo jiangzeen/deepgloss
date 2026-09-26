@@ -73,6 +73,10 @@ export class CardHost {
 
   private cardWidth: number;
   private cardTheme: string;
+  private anchorRect: DOMRect | null = null;
+  private anchorPositionKind: 'below' | 'sidebar' = 'below';
+  private anchorScroll = { x: 0, y: 0 };
+  private repositionRaf = 0;
 
   constructor(cardWidth = 400, cardTheme = 'auto') {
     this.cardWidth = cardWidth;
@@ -160,6 +164,16 @@ export class CardHost {
       }
     });
 
+    // Keep the card anchored to the selection when the page scrolls/resizes.
+    const onViewportChange = () => this.scheduleReposition();
+    window.addEventListener('scroll', onViewportChange, { passive: true, capture: true });
+    window.addEventListener('resize', onViewportChange, { passive: true });
+
+    // Escape closes the card.
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.isVisible) this.hide();
+    });
+
     document.body.appendChild(this.host);
   }
 
@@ -172,15 +186,17 @@ export class CardHost {
       : sourceText;
     this.providerLabel.textContent = providerName || '';
 
-    const pos = calculateCardPosition(rect, this.cardWidth, position);
-    this.host.style.left = `${pos.left}px`;
-    this.host.style.top = `${pos.top}px`;
-    this.container.style.maxHeight = `${pos.maxHeight}px`;
+    this.anchorRect = rect;
+    this.anchorPositionKind = position;
+    this.anchorScroll = { x: window.scrollX, y: window.scrollY };
+
     this.host.style.display = 'block';
+    this.applyPosition(rect, position);
   }
 
   hide(): void {
     this.host.style.display = 'none';
+    this.anchorRect = null;
     this.resetStates();
   }
 
@@ -319,6 +335,38 @@ export class CardHost {
   updateWidth(width: number): void {
     this.cardWidth = width;
     this.container.style.width = `${width}px`;
+    this.scheduleReposition();
+  }
+
+  // ---- Positioning ----
+
+  private applyPosition(rect: DOMRect, position: 'below' | 'sidebar'): void {
+    const pos = calculateCardPosition(rect, this.cardWidth, position);
+    this.host.style.left = `${pos.left}px`;
+    this.host.style.top = `${pos.top}px`;
+    this.host.style.transform = pos.placement === 'above' ? 'translateY(-100%)' : 'none';
+    this.container.style.maxHeight = `${pos.maxHeight}px`;
+  }
+
+  private scheduleReposition(): void {
+    if (this.repositionRaf || !this.isVisible || !this.anchorRect) return;
+    this.repositionRaf = requestAnimationFrame(() => {
+      this.repositionRaf = 0;
+      this.reposition();
+    });
+  }
+
+  private reposition(): void {
+    if (!this.anchorRect || this.host.style.display === 'none') return;
+    const dx = window.scrollX - this.anchorScroll.x;
+    const dy = window.scrollY - this.anchorScroll.y;
+    const rect = new DOMRect(
+      this.anchorRect.left - dx,
+      this.anchorRect.top - dy,
+      this.anchorRect.width,
+      this.anchorRect.height,
+    );
+    this.applyPosition(rect, this.anchorPositionKind);
   }
 
   // ---- Internals ----
