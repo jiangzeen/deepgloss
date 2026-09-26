@@ -12,7 +12,11 @@
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08);
   overflow: hidden;
   animation: dg-fade-in 0.15s ease;
-  max-width: 100%;
+  /* Column flex so the body becomes the only scrollable region */
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
   min-width: 200px;
 }
 
@@ -29,6 +33,7 @@
   padding: 8px 12px;
   border-bottom: 1px solid #f0f0f0;
   user-select: none;
+  flex: 0 0 auto;
 }
 
 .dg-header-title {
@@ -65,12 +70,30 @@
   color: #666;
   border-bottom: 1px solid #f0f0f0;
   word-break: break-word;
+  flex: 0 0 auto;
 }
 
-/* Content area */
+/* Content area — the only scrollable region */
 .dg-body {
   padding: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.dg-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.dg-body::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 4px;
+}
+
+.dg-body::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* Loading */
@@ -158,6 +181,7 @@
   border-top: 1px solid #f0f0f0;
   font-size: 11px;
   color: #aaa;
+  flex: 0 0 auto;
 }
 
 .dg-copy-btn {
@@ -335,6 +359,7 @@
   gap: 4px;
   padding: 6px 10px 0;
   border-bottom: 1px solid #f0f0f0;
+  flex: 0 0 auto;
 }
 
 .dg-tab {
